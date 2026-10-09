@@ -262,7 +262,7 @@ class Tests(unittest.TestCase):
     def bero_policy(self):
         self.login()
         id=self.req('/api/tasks',data=adapters.PRESETS['bero']).json['id']
-        r=self.req(f'/api/tasks/{id}/purchase-policy',method='PUT',data={'payment':'balance'})
+        r=self.req(f'/api/tasks/{id}/purchase-policy',method='PUT',data={'payment':'balance','max_total':'44.10'})
         self.assertEqual(r.status_code,200)
         return id,r.json['policy']
 

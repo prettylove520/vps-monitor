@@ -5,12 +5,13 @@ cd -- "$(dirname -- "$0")"
 apt-get update
 apt-get install -y python3 python3-venv ca-certificates
 if ! id vpswatch >/dev/null 2>&1; then useradd --system --home /var/lib/vps-watch --shell /usr/sbin/nologin vpswatch; fi
-install -d -m 755 /opt/vps-watch /opt/vps-watch/static
+install -d -m 755 /opt/vps-watch /opt/vps-watch/static /opt/vps-watch/merchants
 install -d -m 700 -o vpswatch -g vpswatch /var/lib/vps-watch
 if systemctl is-active --quiet vps-watch-web; then systemctl stop vps-watch-web; fi
 if systemctl is-active --quiet vps-watch-worker; then systemctl stop vps-watch-worker; fi
 for f in app.py store.py network.py adapters.py notifications.py purchases.py accounts.py checkout.py worker.py manage.py verify-web.py requirements.txt; do install -m 644 "$f" "/opt/vps-watch/$f"; done
 install -m 644 static/* /opt/vps-watch/static/
+install -m 644 merchants/*.py /opt/vps-watch/merchants/
 python3 -m venv /opt/vps-watch/.venv
 /opt/vps-watch/.venv/bin/pip install -r /opt/vps-watch/requirements.txt
 if [ ! -f /etc/vps-watch.env ]; then

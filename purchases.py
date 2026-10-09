@@ -1,12 +1,12 @@
-"""Purchase policy, explicit arming, and the durable one-attempt guard."""
+"""Purchase policy per task, explicit arming, and the durable one-attempt guard."""
 import json
 import time
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from store import db
 
-# Verified against the live BERO order flow on 2026-10-09 (see checkout.py docstring).
+# Merchants whose order flow has been verified against the live site.
 VERIFIED_CHECKOUT_ADAPTERS = frozenset({'BERO'})
-FINGERPRINT='BERO:AnniversaryM:109:365:one-purchase'
+OPEN_STATES=('submitting','success','uncertain')
 
 class AttemptExists(ValueError):
     pass
@@ -21,9 +21,20 @@ def initialize():
           id INTEGER PRIMARY KEY, task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
           fingerprint TEXT NOT NULL UNIQUE, state TEXT NOT NULL,
           created REAL NOT NULL, order_id TEXT);
+        CREATE INDEX IF NOT EXISTS idx_attempts_task ON purchase_attempts(task_id,id);
         ''')
 
 initialize()
+
+def _merchant(cfg):
+    import merchants  # late import: merchants.bero imports this module
+    return merchants.checkout_merchant(cfg)
+
+def _task_config(c,task_id):
+    r=c.execute('SELECT config FROM tasks WHERE id=?',(task_id,)).fetchone()
+    if not r:
+        raise ValueError('任务不存在')
+    return json.loads(r[0])
 
 def policy_for(task_id):
     with db() as c:
@@ -34,14 +45,25 @@ def is_armed(policy):
     return bool(policy and policy.get('automatic_purchase_enabled') and policy.get('payment')=='balance'
                 and policy.get('status')=='armed' and policy.get('merchant') in VERIFIED_CHECKOUT_ADAPTERS)
 
-def last_attempt():
+def attempt_for(task_id):
+    """Latest unresolved attempt for this task (blocks re-arming until the user clears it)."""
     with db() as c:
-        r=c.execute('SELECT * FROM purchase_attempts WHERE fingerprint=?',(FINGERPRINT,)).fetchone()
+        r=c.execute('SELECT * FROM purchase_attempts WHERE task_id=? AND state IN (%s) ORDER BY id DESC LIMIT 1'
+                    %','.join('?'*len(OPEN_STATES)),(task_id,*OPEN_STATES)).fetchone()
     return dict(r) if r else None
 
 def _write(c,task_id,policy):
     c.execute('INSERT INTO purchase_policies VALUES (?,?,?) ON CONFLICT(task_id) DO UPDATE SET policy=excluded.policy,updated=excluded.updated',
               (task_id,json.dumps(policy),time.time()))
+
+def _amount(value):
+    try:
+        amount=Decimal(str(value).strip().replace(',','.'))
+        if not amount.is_finite() or amount<=0 or amount>100000 or amount.as_tuple().exponent<-2:
+            raise ValueError()
+    except (InvalidOperation,ValueError):
+        raise ValueError('购买上限须为正数，最多两位小数') from None
+    return str(amount.quantize(Decimal('0.01')))
 
 def save_policy(task_id,data):
     if not isinstance(data,dict) or data.get('payment') not in ('balance','manual'):
@@ -49,17 +71,18 @@ def save_policy(task_id,data):
     if not isinstance(data.get('auto_preflight',False),bool):
         raise ValueError('自动预检设置格式错误')
     with db() as c:
-        r=c.execute('SELECT config FROM tasks WHERE id=?',(task_id,)).fetchone()
-        if not r:
-            raise ValueError('任务不存在')
-        config=json.loads(r[0])
-        if config['adapter']!='bero' or config['coupon']!='DISCORD10':
-            raise ValueError('本次购买设置仅适用于 BERO Anniversary M，且任务优惠码须为 DISCORD10')
+        config=_task_config(c,task_id)
+        merchant=_merchant(config)
+        old=c.execute('SELECT policy FROM purchase_policies WHERE task_id=?',(task_id,)).fetchone()
+        previous=json.loads(old[0]) if old else {}
+        max_total=_amount(data.get('max_total') or previous.get('max_total') or config['max_price'])
         # Saving the limits always disarms; arming is a separate, explicit step.
-        policy={'merchant':'BERO','package_id':109,'package':'Anniversary M','quantity':1,
-                'runtime_days':365,'currency':'EUR','max_total':'44.10','coupon':'DISCORD10',
-                'coupon_required':True,'payment':data['payment'],'max_successful_purchases':1,
-                'renewal_authorized':False,'status':'saved','checkout_verified':True,
+        policy={'merchant':merchant.MERCHANT,'adapter':merchant.NAME,'package_id':config.get('package_id'),
+                'package':config.get('package_name',config['name']),'quantity':1,
+                'runtime_days':config.get('runtime_days'),'currency':merchant.CURRENCY,'max_total':max_total,
+                'coupon':config.get('coupon',''),'coupon_required':bool(config.get('coupon')),'payment':data['payment'],
+                'max_successful_purchases':1,'renewal_authorized':False,'status':'saved',
+                'checkout_verified':merchant.MERCHANT in VERIFIED_CHECKOUT_ADAPTERS,
                 'automatic_purchase_enabled':False,'auto_preflight':data.get('auto_preflight',False)}
         _write(c,task_id,policy)
     return policy
@@ -72,15 +95,27 @@ def arm(task_id,confirm_total):
         if not r:
             raise ValueError('请先保存购买设置')
         policy=json.loads(r[0])
+        merchant=_merchant(_task_config(c,task_id))
+        if policy['merchant'] not in VERIFIED_CHECKOUT_ADAPTERS:
+            raise ValueError('该商家的结账流程尚未验证，不能自动付款')
         if policy['payment']!='balance':
-            raise ValueError('自动付款只支持 BERO 账户余额；请把付款方式改为余额并保存')
-        if not isinstance(confirm_total,str) or confirm_total.strip().replace(',','.')!=policy['max_total']:
+            raise ValueError('自动付款只支持商家账户余额；请把付款方式改为余额并保存')
+        try:
+            confirmed=_amount(confirm_total)
+        except ValueError:
+            confirmed=None
+        if confirmed!=policy['max_total']:
             raise ValueError('请输入 %s 确认购买上限'%policy['max_total'])
-        if c.execute('SELECT 1 FROM purchase_attempts WHERE fingerprint=?',(FINGERPRINT,)).fetchone():
-            raise ValueError('已有购买记录，请先在 BERO 核实订单并清除记录')
-        account=c.execute("SELECT status,session FROM merchant_accounts WHERE merchant='bero'").fetchone()
-        if not account or account['status']!='authenticated' or not account['session']:
-            raise ValueError('先到商家账户验证 BERO 登录')
+        if c.execute('SELECT 1 FROM purchase_attempts WHERE task_id=? AND state IN (%s)'%','.join('?'*len(OPEN_STATES)),
+                     (task_id,*OPEN_STATES)).fetchone():
+            raise ValueError('已有购买记录，请先在商家网站核实订单并清除记录')
+    if not merchant.account_ready():
+        raise ValueError('先到商家账户验证 %s 登录'%merchant.LABEL)
+    with db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        current=c.execute('SELECT policy FROM purchase_policies WHERE task_id=?',(task_id,)).fetchone()
+        if not current or json.loads(current[0])!=policy:
+            raise ValueError('购买设置刚刚发生变化，请重试')
         policy|={'automatic_purchase_enabled':True,'status':'armed','armed_at':time.time()}
         _write(c,task_id,policy)
     return policy
@@ -101,7 +136,8 @@ def finish(task_id,outcome):
         c.execute('UPDATE tasks SET enabled=0 WHERE id=?',(task_id,))
 
 def validate_quote(policy,quote):
-    expected={'package_id':109,'quantity':1,'runtime_days':365,'currency':'EUR','coupon':'DISCORD10','coupon_accepted':True}
+    expected={'package_id':policy.get('package_id'),'quantity':1,'runtime_days':policy.get('runtime_days'),
+              'currency':policy['currency'],'coupon':policy.get('coupon',''),'coupon_accepted':True}
     if any(quote.get(k)!=v for k,v in expected.items()):
         raise ValueError('结账套餐、周期、数量、币种或优惠不匹配')
     if quote.get('final_total_verified') is not True:
@@ -127,10 +163,15 @@ def reserve_attempt(task_id,quote):
         if not is_armed(policy):
             raise ValueError('自动付款未启用')
         validate_quote(policy,quote)
-        if c.execute('SELECT 1 FROM purchase_attempts WHERE fingerprint=?',(FINGERPRINT,)).fetchone():
+        if c.execute('SELECT 1 FROM purchase_attempts WHERE task_id=? AND state IN (%s)'%','.join('?'*len(OPEN_STATES)),
+                     (task_id,*OPEN_STATES)).fetchone():
             raise AttemptExists('已有购买尝试，请先核实订单；禁止重复提交')
-        return c.execute('INSERT INTO purchase_attempts(task_id,fingerprint,state,created) VALUES (?,?,?,?)',
-                         (task_id,FINGERPRINT,'submitting',time.time())).lastrowid
+        fingerprint='task:%d:armed:%s'%(task_id,policy.get('armed_at'))
+        try:
+            return c.execute('INSERT INTO purchase_attempts(task_id,fingerprint,state,created) VALUES (?,?,?,?)',
+                             (task_id,fingerprint,'submitting',time.time())).lastrowid
+        except Exception:
+            raise AttemptExists('本次启用已经尝试过下单；请重新启用自动付款') from None
 
 def release_attempt(attempt_id):
     """Only for failures that happened before the order request was sent."""
@@ -142,9 +183,10 @@ def record_outcome(attempt_id,confirmed_order_id=None):
         c.execute('UPDATE purchase_attempts SET state=?,order_id=? WHERE id=?',
                   ('success' if confirmed_order_id else 'uncertain',confirmed_order_id,attempt_id))
 
-def clear_attempts(confirm):
-    """User confirmed in BERO what happened; allow a future purchase again."""
+def clear_attempts(task_id,confirm):
+    """User confirmed on the merchant site what happened; allow a future purchase for this task."""
     if confirm!='已核实':
-        raise ValueError('请输入「已核实」确认你已在 BERO 检查过订单和余额')
+        raise ValueError('请输入「已核实」确认你已在商家网站检查过订单和余额')
     with db() as c:
-        c.execute('DELETE FROM purchase_attempts WHERE fingerprint=?',(FINGERPRINT,))
+        c.execute("UPDATE purchase_attempts SET state='cleared' WHERE task_id=? AND state IN (%s)"%','.join('?'*len(OPEN_STATES)),
+                  (task_id,*OPEN_STATES))

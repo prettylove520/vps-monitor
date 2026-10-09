@@ -36,7 +36,7 @@ async function switchView(view){
  }catch(e){if(generation===settingsGeneration){toast(e.message);$('#barkState').textContent='加载失败，请重新进入通知设置';$('#tokenState').textContent='加载失败'}}
  finally{if(generation===settingsGeneration)settingsBusy(false)}
 }
-function fill(config){const f=$('#taskForm');for(const [k,v]of Object.entries(config)){if(f.elements.namedItem(k))f.elements.namedItem(k).value=v}const generic=config.adapter==='generic';$('#genericFields').hidden=!generic;f.elements.url.readOnly=!generic;for(const n of ['scope','identity','price_selector','in_stock','out_stock'])f.elements.namedItem(n).required=generic}
+function fill(config){const f=$('#taskForm');for(const [k,v]of Object.entries(config)){if(f.elements.namedItem(k))f.elements.namedItem(k).value=v}const generic=config.adapter==='generic',bero=config.adapter==='bero';$('#genericFields').hidden=!generic;$('#beroFields').hidden=!bero;f.elements.url.readOnly=config.adapter==='vmiss';for(const n of ['scope','identity','price_selector','in_stock','out_stock'])f.elements.namedItem(n).required=generic;for(const n of ['package_id','package_name','runtime_days'])f.elements.namedItem(n).required=bero}
 function openTask(task){editing=task?.id||null;$('#taskForm').reset();$('#formError').textContent='';$('#dialogTitle').textContent=editing?'编辑监控任务':'添加监控任务';fill(task?.config||data.presets.bero);$('#taskDialog').showModal()}
 $('#add').onclick=()=>openTask();$('#emptyAdd').onclick=()=>openTask();$('#closeDialog').onclick=()=>$('#taskDialog').close();$('#adapter').onchange=()=>fill(data.presets[$('#adapter').value]);
 $('#taskForm').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{const cfg=Object.fromEntries(new FormData(e.target));cfg.interval=Number(cfg.interval);await api(editing?'/tasks/'+editing:'/tasks',editing?'PUT':'POST',cfg);$('#taskDialog').close();toast('任务已保存，当前为暂停状态。');await refresh()}catch(e){$('#formError').textContent=e.message}finally{b.disabled=false}};
@@ -50,7 +50,7 @@ function renderTasks(){
  document.querySelectorAll('.taskcard').forEach(card=>{
   const id=Number(card.querySelector('[data-id]')?.dataset.id);
   const task=data.tasks.find(t=>t.id===id);
-  if(task?.config.adapter!=='bero')return;
+  if(!task?.checkout_supported)return;
   const button=document.createElement('button');button.type='button';button.textContent='购买设置';button.dataset.action='purchase';button.dataset.id=id;
   card.querySelector('.taskactions').append(button);
   const preflight=document.createElement('button');preflight.type='button';preflight.textContent='结账预检';preflight.dataset.action='preflight';preflight.dataset.id=id;
@@ -64,30 +64,39 @@ $('#taskList').addEventListener('click',e=>{
  if(b.dataset.action==='preflight'){openPreflight(Number(b.dataset.id));return}
  purchaseTask=Number(b.dataset.id);$('#purchaseError').textContent='';
  const policy=data.tasks.find(t=>t.id===purchaseTask)?.purchase_policy;
- $('#purchasePayment').value=policy?.payment||'balance';$('#purchaseAutoPreflight').checked=!!policy?.auto_preflight;showArm(policy);$('#purchaseDialog').showModal();
+ showPurchase();$('#purchaseDialog').showModal();
 },true);
 $('#closePurchase').onclick=()=>$('#purchaseDialog').close();
+function purchaseTaskData(){return data.tasks.find(t=>t.id===purchaseTask)}
+function showPurchase(){
+ const task=purchaseTaskData(),c=task.config,policy=task.purchase_policy;
+ $('#purchaseRules').textContent=`${c.package_name||c.name} · 1 台 · ${c.runtime_days||'?'} 天\n${c.coupon?'必须应用优惠码 '+c.coupon:'不使用优惠码'} · 含税总额不超过下方上限\n成功一次后自动停止，不授权续费。`;
+ $('#purchasePayment').value=policy?.payment||'balance';$('#purchaseAutoPreflight').checked=!!policy?.auto_preflight;
+ $('#purchaseMaxTotal').value=policy?.max_total||c.max_price;showArm(policy);
+}
 function showArm(policy){
- const a=data?.purchase_attempt;$('#armError').textContent='';$('#armConfirm').value='';$('#attemptConfirm').value='';
+ const task=purchaseTaskData(),c=task.config,a=task.purchase_attempt,cap=policy?.max_total;
+ $('#armHelp').textContent=`启用后，监控发现补货会立刻用已登录的会话完成：选择 ${c.package_name||c.name} → ${c.runtime_days||'?'} 天${c.coupon?' → '+c.coupon:''} → 核对规格与价格（≤ €${cap||'上限'}）→ 核对余额 → 勾选条款 → 下单，订单从账户余额扣款。只会下单一次，结果不明时不会重试。`;
+ $('#armConfirmLabel').textContent=cap?`输入 ${cap} 确认购买上限`:'先保存购买设置';$('#armConfirm').placeholder=cap||'';$('#armError').textContent='';$('#armConfirm').value='';$('#attemptConfirm').value='';
  const armed=policy?.status==='armed';
- $('#armState').textContent=!policy?'请先保存购买设置':armed?'已启用：补货时自动用余额下单一次（上限 €'+policy.max_total+'）':policy.status==='purchased'?'已自动下单，自动付款已关闭':policy.status==='uncertain'?'已提交下单但未确认扣款，请到 BERO 核实':policy.payment!=='balance'?'付款方式为人工确认，不会自动下单':'未启用';
+ $('#armState').textContent=!policy?'请先保存购买设置':armed?'已启用：补货时自动用余额下单一次（上限 €'+policy.max_total+'）':policy.status==='purchased'?'已自动下单，自动付款已关闭':policy.status==='uncertain'?'已提交下单但未确认扣款，请到商家网站核实':policy.payment!=='balance'?'付款方式为人工确认，不会自动下单':'未启用';
  $('#armState').classList.toggle('ok',armed);
  $('#armPurchase').disabled=!policy||armed||policy.payment!=='balance'||!!a;$('#disarmPurchase').disabled=!armed;$('#armConfirm').disabled=$('#armPurchase').disabled;
  $('#attemptBox').hidden=!a;
  if(a)$('#attemptState').textContent='购买记录：'+({success:'已下单并确认扣款',uncertain:'已提交，结果未确认',submitting:'正在提交'}[a.state]||a.state)+' · '+time(a.created)+(a.order_id?' · '+a.order_id:'');
 }
-async function armAction(path,body,msg){$('#armError').textContent='';try{await api(path,'POST',body);toast(msg);await refresh();showArm(data.tasks.find(t=>t.id===purchaseTask)?.purchase_policy)}catch(e){$('#armError').textContent=e.message}}
+async function armAction(path,body,msg){$('#armError').textContent='';try{await api(path,'POST',body);toast(msg);await refresh();showArm(purchaseTaskData()?.purchase_policy)}catch(e){$('#armError').textContent=e.message}}
 $('#armPurchase').onclick=()=>armAction('/tasks/'+purchaseTask+'/purchase/arm',{confirm_total:$('#armConfirm').value},'自动付款已启用：补货时会用余额下单一次');
 $('#disarmPurchase').onclick=()=>armAction('/tasks/'+purchaseTask+'/purchase/disarm',{},'自动付款已关闭');
-$('#clearAttempt').onclick=()=>armAction('/purchase-attempts/clear',{confirm:$('#attemptConfirm').value},'购买记录已清除');
-$('#purchaseForm').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await api('/tasks/'+purchaseTask+'/purchase-policy','PUT',{payment:$('#purchasePayment').value,auto_preflight:$('#purchaseAutoPreflight').checked});toast('购买设置已保存；如需自动付款，请在下方启用。');await refresh();showArm(data.tasks.find(t=>t.id===purchaseTask)?.purchase_policy);$('#purchaseDialog').showModal()}catch(e){$('#purchaseError').textContent=e.message}finally{b.disabled=false}};
+$('#clearAttempt').onclick=()=>armAction('/tasks/'+purchaseTask+'/purchase-attempts/clear',{confirm:$('#attemptConfirm').value},'购买记录已清除');
+$('#purchaseForm').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await api('/tasks/'+purchaseTask+'/purchase-policy','PUT',{payment:$('#purchasePayment').value,auto_preflight:$('#purchaseAutoPreflight').checked,max_total:$('#purchaseMaxTotal').value});toast('购买设置已保存；如需自动付款，请在下方启用。');await refresh();showPurchase();$('#purchaseDialog').showModal()}catch(e){$('#purchaseError').textContent=e.message}finally{b.disabled=false}};
 let preflightTask=null,preflightGeneration=0,preflightLoading=false;
 function showPreflight(job){
  const states={queued:'已排队，等待后台检查',running:'正在商家网站核对',done:'已完成',error:'未完成',outdated:'任务已修改，结果作废'};
  $('#preflightState').textContent=job?(job.mode==='purchase'?'自动下单 · ':'结账预检 · ')+(states[job.state]||job.state):'尚未运行预检';
  $('#preflightMessage').textContent=job?.result?.message||'先保存购买设置并验证 BERO 登录，再运行预检。此操作会打开正常配置流程，不提交订单或付款。';
  const r=job?.result;
- $('#preflightFacts').textContent=r?.specifications_verified?`套餐：Anniversary M · 365 天\n概览含税价格：€${r.overview_total_eur}\nDISCORD10：${r.coupon_accepted?'已接受':'未接受'}\n账户余额：${r.balance_verified||r.balance_before?(r.balance_sufficient===false?'不足，请充值':'足够'):'未读取'}\n最终确认页：${r.final_checkout_verified||r.final_total_eur?'已核实 €'+(r.final_total_eur||''):'未到达（缺货时正常）'}\n订单：${r.paid?'已下单并扣款':r.order_submitted?'已提交，待核实':'未提交'}`:'';
+ $('#preflightFacts').textContent=r?.specifications_verified?`套餐：${r.name||''} · ${r.runtime_days||''} 天\n概览含税价格：€${r.overview_total_eur}\n优惠码${r.coupon?' '+r.coupon:''}：${r.coupon?(r.coupon_accepted?'已接受':'未接受'):'未使用'}\n账户余额：${r.balance_verified||r.balance_before?(r.balance_sufficient===false?'不足，请充值':'足够'):'未读取'}\n最终确认页：${r.final_checkout_verified||r.final_total_eur?'已核实 €'+(r.final_total_eur||''):'未到达（缺货时正常）'}\n订单：${r.paid?'已下单并扣款':r.order_submitted?'已提交，待核实':'未提交'}`:'';
  $('#preflightJson').value=job?JSON.stringify(job,null,2):'';
  $('#runPreflight').disabled=['queued','running'].includes(job?.state);
  $('#copyPreflight').disabled=!job;

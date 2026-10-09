@@ -1,0 +1,27 @@
+# 首次启动：
+#   docker compose run --rm web python manage.py password   # 设置管理员密码（至少 12 位）
+#   docker compose up -d
+# 网页只监听本机 127.0.0.1:18080；公网访问请在前面加 HTTPS 反向代理（见 README）。
+services:
+  web:
+    build: .
+    image: vps-watch:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18080:18080"
+    environment:
+      # 通过 HTTPS 反向代理访问时改为 1
+      COOKIE_SECURE: "0"
+    volumes:
+      - vps-watch-data:/data
+  worker:
+    image: vps-watch:latest
+    depends_on: [web]
+    restart: unless-stopped
+    command: ["python", "worker.py"]
+    volumes:
+      - vps-watch-data:/data
+    healthcheck:
+      disable: true
+volumes:
+  vps-watch-data:

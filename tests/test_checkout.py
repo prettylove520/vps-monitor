@@ -12,6 +12,9 @@ from store import db
 import accounts
 import adapters
 import checkout
+from merchants import bero
+BERO_CFG=adapters.validate(adapters.PRESETS['bero'])
+TARGET=bero.target(BERO_CFG)
 import purchases
 import worker
 
@@ -45,7 +48,7 @@ class Merchant:
     def request(self,path,**kwargs):
         if not kwargs:
             self.gets.append(path)
-            if path==checkout.BALANCE_PAGE:
+            if path==bero.BALANCE_PAGE:
                 return money_page(self.balances.pop(0) if len(self.balances)>1 else self.balances[0])
             return initial()
         self.sent.append(kwargs['json_payload'])
@@ -61,7 +64,7 @@ class CheckoutTests(unittest.TestCase):
         with db() as c:
             c.execute('DELETE FROM tasks');c.execute('DELETE FROM merchant_accounts');c.execute('DELETE FROM hosts');c.execute('DELETE FROM logs')
             self.id=c.execute('INSERT INTO tasks(config,created) VALUES (?,?)',(json.dumps(adapters.validate(adapters.PRESETS['bero'])),time.time())).lastrowid
-        self.policy=purchases.save_policy(self.id,{'payment':'manual','auto_preflight':False})
+        self.policy=purchases.save_policy(self.id,{'max_total':'44.10','payment':'manual','auto_preflight':False})
         self.client=app.test_client()
         with self.client.session_transaction() as s:s.update(admin=True,csrf='csrf')
 
@@ -71,7 +74,7 @@ class CheckoutTests(unittest.TestCase):
             c.execute("UPDATE merchant_accounts SET session=?,status='authenticated',last_verified=?",(accounts.encode([COOKIE]),time.time()))
 
     def test_actual_soldout_coupon_flow_and_immutable_snapshots(self):
-        merchant=Merchant();report=checkout.inspect_checkout(merchant,self.policy)
+        merchant=Merchant();report=bero.preflight(merchant,BERO_CFG,self.policy)
         self.assertEqual(report['status'],'out_of_stock')
         self.assertEqual(report['overview_total_eur'],'44.10')
         self.assertTrue(report['coupon_accepted'])
@@ -83,11 +86,11 @@ class CheckoutTests(unittest.TestCase):
 
     def test_disabled_next_never_called_even_if_snapshot_claims_stock(self):
         merchant=Merchant();merchant.snapshots[4]=snapshot(1100,True)
-        report=checkout.inspect_checkout(merchant,self.policy)
+        report=bero.preflight(merchant,BERO_CFG,self.policy)
         self.assertEqual(report['status'],'out_of_stock');self.assertEqual(len(merchant.sent),4)
 
     def test_in_stock_preflight_reaches_check_page_and_never_orders(self):
-        merchant=Merchant(stock=True);report=checkout.inspect_checkout(merchant,self.policy)
+        merchant=Merchant(stock=True);report=bero.preflight(merchant,BERO_CFG,self.policy)
         self.assertEqual(report['status'],'ready');self.assertTrue(report['final_checkout_verified'])
         self.assertEqual(report['final_total_eur'],'44.10');self.assertTrue(report['balance_sufficient'])
         self.assertEqual(len(merchant.sent),5);self.assertEqual(merchant.methods()[-1],'jumpToStep[1400]')
@@ -98,46 +101,46 @@ class CheckoutTests(unittest.TestCase):
 
     def test_preflight_unknown_next_step_stops(self):
         merchant=Merchant(stock=True,next_step=1300)
-        report=checkout.inspect_checkout(merchant,self.policy)
+        report=bero.preflight(merchant,BERO_CFG,self.policy)
         self.assertEqual(report['status'],'needs_checkout_adapter');self.assertFalse(report['order_submitted'])
 
     def test_coupon_rejected_and_high_price_stop(self):
         for page,status in [(fixture('bero-coupon109.html').replace('(DISCORD10)','(OTHER)'), 'coupon_rejected'),
                             (fixture('bero-coupon109.html').replace('44,10','44,11'), 'price_exceeded')]:
             merchant=Merchant(coupon_html=page)
-            report=checkout.inspect_checkout(merchant,self.policy)
+            report=bero.preflight(merchant,BERO_CFG,self.policy)
             self.assertEqual(report['status'],status);self.assertEqual(len(merchant.sent),4)
 
     def test_changed_specs_or_cycle_stop_before_coupon(self):
         for old,new in [('365 Tage','720 Tage'),('12 GB','24 GB'),('120 GB','240 GB')]:
             merchant=Merchant();merchant.pages[2]=merchant.pages[2].replace(old,new)
-            with self.assertRaises(checkout.PreflightError):checkout.inspect_checkout(merchant,self.policy)
+            with self.assertRaises(bero.PreflightError):bero.preflight(merchant,BERO_CFG,self.policy)
             self.assertEqual(len(merchant.sent),3)
 
     def test_ambiguous_and_zero_price_rejected(self):
-        soup=checkout.BeautifulSoup(fixture('bero-coupon109.html'),'html.parser')
-        soup.append(checkout.BeautifulSoup('<p class="fw-bold">44,10 € INKL. MWST.</p>','html.parser'))
-        with self.assertRaises(checkout.PreflightError):checkout.overview_quote(soup)
-        with self.assertRaises(checkout.PreflightError):checkout.overview_quote(checkout.BeautifulSoup(fixture('bero-coupon109.html').replace('44,10','0,00'),'html.parser'))
+        soup=bero.BeautifulSoup(fixture('bero-coupon109.html'),'html.parser')
+        soup.append(bero.BeautifulSoup('<p class="fw-bold">44,10 € INKL. MWST.</p>','html.parser'))
+        with self.assertRaises(bero.PreflightError):bero.overview_quote(soup,TARGET)
+        with self.assertRaises(bero.PreflightError):bero.overview_quote(bero.BeautifulSoup(fixture('bero-coupon109.html').replace('44,10','0,00'),'html.parser'),TARGET)
 
     def test_rejects_changed_package_snapshot_or_redirect(self):
         for value in (snapshot(package=108),snapshot().replace('synthetic-id','other-id')):
             merchant=Merchant();merchant.snapshots[1]=value
-            with self.assertRaises(checkout.PreflightError):checkout.inspect_checkout(merchant,self.policy)
+            with self.assertRaises(bero.PreflightError):bero.preflight(merchant,BERO_CFG,self.policy)
         merchant=MagicMock();merchant.request.side_effect=[initial(),{'components':[{'snapshot':snapshot(),'effects':{'redirect':'https://other.example'}}]}]
-        with self.assertRaises(checkout.PreflightError):checkout.inspect_checkout(merchant,self.policy)
+        with self.assertRaises(bero.PreflightError):bero.preflight(merchant,BERO_CFG,self.policy)
 
     def test_same_origin_endpoint_and_ui_action_whitelist(self):
         for target in ('https://other.example/update','https://bero-host.de:8443/livewire-test/update','/login'):
-            with self.assertRaises(checkout.PreflightError):checkout.OrderView(MagicMock(),initial().replace('/livewire-test/update',target))
-        client=MagicMock();order=checkout.OrderView(client,initial())
+            with self.assertRaises(bero.PreflightError):bero.OrderView(MagicMock(),target=TARGET,html=initial().replace('/livewire-test/update',target))
+        client=MagicMock();order=bero.OrderView(client,initial(),target=TARGET)
         for method,params,updates in [('purchase',[],{}),('jumpToStep',[2000],{}),('jumpToStep',[1500],{}),('toggleAgbConfirmation',[],{}),('selectPackage',[108],{}),('selectPackage',[109],{'packageAvailable':True}),('selectPackage',[109],{'enteredCode':'DISCORD10'})]:
-            with self.assertRaises(checkout.PreflightError):order.call(method,params,updates)
+            with self.assertRaises(bero.PreflightError):order.call(method,params,updates)
         client.request.assert_not_called()
 
     def test_challenge_stops(self):
         merchant=Merchant();merchant.pages[0]+='<div class="g-recaptcha"></div>'
-        with self.assertRaises(checkout.PreflightError):checkout.inspect_checkout(merchant,self.policy)
+        with self.assertRaises(bero.PreflightError):bero.preflight(merchant,BERO_CFG,self.policy)
         self.assertEqual(len(merchant.sent),1)
 
     def test_queue_requires_login_dedups_and_has_cooldown(self):
@@ -145,7 +148,7 @@ class CheckoutTests(unittest.TestCase):
         self.account();checkout.enqueue(self.id)
         with self.assertRaises(ValueError):checkout.enqueue(self.id)
         self.assertEqual(checkout.latest(self.id)['state'],'queued')
-        with patch('checkout.accounts.checkout_session') as session:
+        with patch('merchants.bero.accounts.checkout_session') as session:
             session.return_value.__enter__.return_value=Merchant()
             self.assertTrue(checkout.run_next())
         self.assertEqual(checkout.latest(self.id)['result']['status'],'out_of_stock')
@@ -165,7 +168,7 @@ class CheckoutTests(unittest.TestCase):
     def test_paused_revision_invalidates_queued_job(self):
         self.account();checkout.enqueue(self.id)
         with db() as c:c.execute('UPDATE tasks SET revision=revision+1')
-        with patch('checkout.accounts.checkout_session') as session:self.assertTrue(checkout.run_next())
+        with patch('merchants.bero.accounts.checkout_session') as session:self.assertTrue(checkout.run_next())
         session.assert_not_called();self.assertEqual(checkout.latest(self.id)['state'],'outdated')
 
     def test_unknown_network_error_is_secret_free(self):
@@ -173,12 +176,12 @@ class CheckoutTests(unittest.TestCase):
             self.account()
             with db() as c:c.execute('DELETE FROM checkout_preflights');c.execute('DELETE FROM hosts')
             checkout.enqueue(self.id)
-            with patch('checkout.accounts.checkout_session',side_effect=error):checkout.run_next()
+            with patch('merchants.bero.accounts.checkout_session',side_effect=error):checkout.run_next()
             self.assertEqual(checkout.latest(self.id)['state'],'error')
             self.assertNotIn('private-password',json.dumps(checkout.latest(self.id)))
 
     def test_auto_preflight_only_on_stock_transition(self):
-        self.account();purchases.save_policy(self.id,{'payment':'manual','auto_preflight':True})
+        self.account();purchases.save_policy(self.id,{'max_total':'44.10','payment':'manual','auto_preflight':True})
         with db() as c:row=dict(c.execute('SELECT * FROM tasks WHERE id=?',(self.id,)).fetchone())
         cfg=json.loads(row['config']);row['status']='out_of_stock'
         result={'status':'available','detail':'In stock','price':'49.00','currency':'EUR'}
@@ -234,7 +237,7 @@ class CheckoutSessionTests(unittest.TestCase):
         response.status=302;response.headers=Message()
         client=accounts.BeroSession([COOKIE])
         with patch('accounts.public_ips',return_value=['1.1.1.1']),patch('accounts.PinnedHTTPS',return_value=conn):
-            with self.assertRaises(accounts.LoginIssue):client.request('/livewire-test/update',json_payload={'test':True},referer=checkout.STORE)
+            with self.assertRaises(accounts.LoginIssue):client.request('/livewire-test/update',json_payload={'test':True},referer=TARGET.store)
         self.assertEqual(conn.request.call_count,1)
 
     def test_json_transport_sends_csrf_origin_cookie_and_reads_json(self):
@@ -243,11 +246,11 @@ class CheckoutSessionTests(unittest.TestCase):
         response.read.return_value=b'{"components":[]}'
         client=accounts.BeroSession([COOKIE]);payload={'_token':'synthetic-token','components':[]}
         with patch('accounts.public_ips',return_value=['1.1.1.1']),patch('accounts.PinnedHTTPS',return_value=conn):
-            self.assertEqual(client.request('/livewire-test/update',json_payload=payload,referer=checkout.STORE),{'components':[]})
+            self.assertEqual(client.request('/livewire-test/update',json_payload=payload,referer=TARGET.store),{'components':[]})
         args=conn.request.call_args
         self.assertEqual(args.args,('POST','/livewire-test/update'))
         self.assertEqual(json.loads(args.kwargs['body']),payload)
         self.assertEqual(args.kwargs['headers']['Content-type'],'application/json')
         self.assertEqual(args.kwargs['headers']['Origin'],accounts.ORIGIN)
-        self.assertEqual(args.kwargs['headers']['Referer'],checkout.STORE)
+        self.assertEqual(args.kwargs['headers']['Referer'],TARGET.store)
         self.assertEqual(args.kwargs['headers']['Cookie'],'bero_session=secret-cookie-value')

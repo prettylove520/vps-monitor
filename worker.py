@@ -5,6 +5,7 @@ from urllib.parse import urlsplit
 import adapters
 import notifications
 import accounts
+import merchants
 import checkout
 import purchases
 from network import get_html, FetchError
@@ -142,16 +143,18 @@ def checkout_notice(task_id,mode,result):
         return
     with db() as c:
         row=c.execute('SELECT config FROM tasks WHERE id=?',(task_id,)).fetchone()
-    name=json.loads(row[0])['name'] if row else 'BERO'
+    cfg=json.loads(row[0]) if row else {}
+    name=cfg.get('name','任务 %s'%task_id)
+    orders=getattr(merchants.REGISTRY.get(cfg.get('adapter')),'ORDERS_URL','')
     lines=[title.format(name=name),result.get('message','')]
     if result.get('final_total_eur'):
-        lines.append('金额：€'+result['final_total_eur'])
+        lines.append('金额：%s EUR'%result['final_total_eur'])
     if result.get('balance_sufficient') is False:
         lines.append('账户余额不足以支付，请提前充值。')
     if status in ('purchased','uncertain'):
-        lines.append('请到 https://bero-host.de/customer/products 核实。自动下单已关闭，不会重复下单。')
+        lines.append('请到 %s 核实。自动下单已关闭，不会重复下单。'%(orders or '商家网站'))
     try:
-        report=notifications.send('\n'.join(lines),urgent=urgent,url='https://bero-host.de/customer/products')
+        report=notifications.send('\n'.join(lines),urgent=urgent,url=orders)
         if report['failed']:
             log(task_id,'warning','结账通知：'+'；'.join(report['failed'].values()))
     except ValueError:

@@ -10,6 +10,9 @@ from store import db
 import accounts
 import adapters
 import checkout
+from merchants import bero
+BERO_CFG=adapters.validate(adapters.PRESETS['bero'])
+TARGET=bero.target(BERO_CFG)
 import purchases
 import worker
 
@@ -25,7 +28,7 @@ class PurchaseTests(unittest.TestCase):
         accounts.save_credentials({'email':'account@example.com','password':'private-password','auto_relogin':True})
         with db() as c:
             c.execute("UPDATE merchant_accounts SET session=?,status='authenticated',last_verified=?",(accounts.encode([COOKIE]),time.time()))
-        purchases.save_policy(self.id,{'payment':'balance'})
+        purchases.save_policy(self.id,{'max_total':'44.10','payment':'balance'})
         self.policy=purchases.arm(self.id,'44.10')
         self.client=app.test_client()
         with self.client.session_transaction() as s:s.update(admin=True,csrf='csrf')
@@ -35,7 +38,7 @@ class PurchaseTests(unittest.TestCase):
 
     def test_full_order_in_verified_sequence_and_balance_confirmation(self):
         merchant=Merchant(stock=True)
-        report=checkout.execute_purchase(merchant,self.policy,self.id)
+        report=bero.purchase(merchant,BERO_CFG,self.policy,self.id)
         self.assertEqual(report['status'],'purchased');self.assertTrue(report['paid'])
         self.assertEqual(merchant.methods(),ORDER)
         self.assertEqual(report['final_total_eur'],'44.10')
@@ -44,43 +47,43 @@ class PurchaseTests(unittest.TestCase):
         for i,p in enumerate(merchant.sent):self.assertEqual(p['components'][0]['snapshot'],merchant.snapshots[i])
         self.assertEqual([p['components'][0]['updates'] for p in merchant.sent].count({'enteredCode':'DISCORD10'}),1)
         with self.assertRaises(purchases.AttemptExists):
-            checkout.execute_purchase(Merchant(stock=True),self.policy,self.id)
+            bero.purchase(Merchant(stock=True),BERO_CFG,self.policy,self.id)
 
     def test_out_of_stock_at_checkout_reserves_nothing(self):
         merchant=Merchant(stock=False)
-        report=checkout.execute_purchase(merchant,self.policy,self.id)
+        report=bero.purchase(merchant,BERO_CFG,self.policy,self.id)
         self.assertEqual(report['status'],'out_of_stock');self.assertFalse(report['order_submitted'])
         self.assertEqual(len(merchant.sent),4);self.assertEqual(self.attempts(),[])
 
     def test_insufficient_balance_stops_before_checkout(self):
         merchant=Merchant(stock=True,balances=('40,00',))
-        report=checkout.execute_purchase(merchant,self.policy,self.id)
+        report=bero.purchase(merchant,BERO_CFG,self.policy,self.id)
         self.assertEqual(report['status'],'insufficient_balance');self.assertEqual(merchant.sent,[])
 
     def test_check_page_price_change_or_wrong_specs_stop(self):
         for old,new in [('44,10','44,11'),('365 Tage','30 Tage')]:
             merchant=Merchant(stock=True,check_html=fixture('bero-check109.html').replace(old,new))
             try:
-                report=checkout.execute_purchase(merchant,self.policy,self.id)
+                report=bero.purchase(merchant,BERO_CFG,self.policy,self.id)
                 self.assertEqual(report['status'],'price_exceeded')
-            except checkout.PreflightError:
+            except bero.PreflightError:
                 pass
             self.assertNotIn('toggleAgbConfirmation[]',merchant.methods());self.assertEqual(self.attempts(),[])
 
     def test_changed_order_form_stops(self):
         for old,new in [('jumpToStep(1500)','placeOrder'),('wire:click="toggleAgbConfirmation"','wire:click="other"')]:
             merchant=Merchant(stock=True,check_html=fixture('bero-check109.html').replace(old,new))
-            with self.assertRaises(checkout.PreflightError):checkout.execute_purchase(merchant,self.policy,self.id)
+            with self.assertRaises(bero.PreflightError):bero.purchase(merchant,BERO_CFG,self.policy,self.id)
             self.assertEqual(len(merchant.sent),5);self.assertEqual(self.attempts(),[])
 
     def test_unexpected_next_step_stops(self):
         merchant=Merchant(stock=True,next_step=1300)
-        report=checkout.execute_purchase(merchant,self.policy,self.id)
+        report=bero.purchase(merchant,BERO_CFG,self.policy,self.id)
         self.assertEqual(report['status'],'unexpected_flow');self.assertEqual(len(merchant.sent),4)
 
     def test_terms_toggle_failure_releases_reservation(self):
         merchant=Merchant(stock=True);merchant.snapshots[6]=merchant.snapshots[5]  # agb stays false
-        with self.assertRaises(checkout.PreflightError):checkout.execute_purchase(merchant,self.policy,self.id)
+        with self.assertRaises(bero.PreflightError):bero.purchase(merchant,BERO_CFG,self.policy,self.id)
         self.assertNotIn('jumpToStep[1500]',merchant.methods());self.assertEqual(self.attempts(),[])
 
     def test_lost_submit_response_is_uncertain_and_never_resent(self):
@@ -91,15 +94,15 @@ class PurchaseTests(unittest.TestCase):
                 merchant.sent.append(kwargs['json_payload']);raise OSError('connection reset')
             return original(path,**kwargs)
         merchant.request=flaky
-        report=checkout.execute_purchase(merchant,self.policy,self.id)
+        report=bero.purchase(merchant,BERO_CFG,self.policy,self.id)
         self.assertEqual(report['status'],'uncertain');self.assertTrue(report['order_submitted'])
         self.assertEqual(merchant.methods().count('jumpToStep[1500]'),1)
         self.assertEqual(self.attempts()[0]['state'],'uncertain')
 
     def test_disarmed_policy_blocks_terms_and_submit(self):
-        order=checkout.OrderView(Merchant(),checkout.BeautifulSoup('','html.parser') and __import__('test_checkout').initial())
+        order=bero.OrderView(Merchant(),__import__('test_checkout').initial(),target=TARGET)
         for method,params in (('toggleAgbConfirmation',[]),('jumpToStep',[1500])):
-            with self.assertRaises(checkout.PreflightError):order.call(method,params)
+            with self.assertRaises(bero.PreflightError):order.call(method,params)
         purchases.disarm(self.id)
         with self.assertRaises(ValueError):checkout.enqueue(self.id,'purchase')
 
@@ -107,7 +110,7 @@ class PurchaseTests(unittest.TestCase):
         checkout.enqueue(self.id,'purchase')
         with db() as c:c.execute("INSERT INTO hosts VALUES ('bero-host.de',?)",(time.time()+100,))
         notices=[]
-        with patch('checkout.accounts.checkout_session') as session:
+        with patch('merchants.bero.accounts.checkout_session') as session:
             session.return_value.__enter__.return_value=Merchant(stock=True)
             self.assertTrue(checkout.run_next(notify=lambda *a:notices.append(a)))
         job=checkout.latest(self.id)
@@ -146,25 +149,30 @@ class PurchaseTests(unittest.TestCase):
     def test_arm_api_requires_confirmation_balance_and_login(self):
         h={'X-CSRF-Token':'csrf'};path=f'/api/tasks/{self.id}/purchase/arm'
         self.assertIn(app.test_client().post(path,json={}).status_code,(401,403))
-        self.client.put(f'/api/tasks/{self.id}/purchase-policy',json={'payment':'balance'},headers=h)
+        self.client.put(f'/api/tasks/{self.id}/purchase-policy',json={'payment':'balance','max_total':'44.10'},headers=h)
         self.assertFalse(purchases.is_armed(purchases.policy_for(self.id)))  # saving disarms
         self.assertEqual(self.client.post(path,json={'confirm_total':'49.00'},headers=h).status_code,400)
         self.assertEqual(self.client.post(path,json={'confirm_total':'44,10'},headers=h).status_code,200)
         self.assertTrue(purchases.is_armed(purchases.policy_for(self.id)))
         self.assertEqual(self.client.post(f'/api/tasks/{self.id}/purchase/disarm',json={},headers=h).status_code,200)
-        self.client.put(f'/api/tasks/{self.id}/purchase-policy',json={'payment':'manual'},headers=h)
+        self.client.put(f'/api/tasks/{self.id}/purchase-policy',json={'payment':'manual','max_total':'44.10'},headers=h)
         self.assertEqual(self.client.post(path,json={'confirm_total':'44.10'},headers=h).status_code,400)
-        self.client.put(f'/api/tasks/{self.id}/purchase-policy',json={'payment':'balance'},headers=h)
+        self.client.put(f'/api/tasks/{self.id}/purchase-policy',json={'payment':'balance','max_total':'44.10'},headers=h)
         with db() as c:c.execute("UPDATE merchant_accounts SET status='expired'")
         self.assertEqual(self.client.post(path,json={'confirm_total':'44.10'},headers=h).status_code,400)
 
     def test_clear_attempts_requires_typed_confirmation(self):
-        checkout.execute_purchase(Merchant(stock=True),self.policy,self.id)
-        h={'X-CSRF-Token':'csrf'}
-        self.assertIsNotNone(self.client.get('/api/dashboard').json['purchase_attempt'])
-        self.assertEqual(self.client.post('/api/purchase-attempts/clear',json={'confirm':'yes'},headers=h).status_code,400)
-        self.assertEqual(self.client.post('/api/purchase-attempts/clear',json={'confirm':'已核实'},headers=h).status_code,200)
-        self.assertEqual(self.attempts(),[])
+        bero.purchase(Merchant(stock=True),BERO_CFG,self.policy,self.id)
+        h={'X-CSRF-Token':'csrf'};path=f'/api/tasks/{self.id}/purchase-attempts/clear'
+        task=self.client.get('/api/dashboard').json['tasks'][0]
+        self.assertEqual(task['purchase_attempt']['state'],'success');self.assertTrue(task['checkout_supported'])
+        self.assertEqual(self.client.post(path,json={'confirm':'yes'},headers=h).status_code,400)
+        self.assertEqual(self.client.post(path,json={'confirm':'已核实'},headers=h).status_code,200)
+        self.assertEqual([a['state'] for a in self.attempts()],['cleared'])
+        self.assertIsNone(purchases.attempt_for(self.id))
+        # history is kept, and the task can be armed again for a new purchase
+        purchases.save_policy(self.id,{'payment':'balance','max_total':'44.10'})
+        self.assertTrue(purchases.is_armed(purchases.arm(self.id,'44.10')))
 
     def test_english_account_ui(self):
         """Logged-in BERO accounts may render English labels (seen live 2026-10-09)."""
@@ -175,24 +183,24 @@ class PurchaseTests(unittest.TestCase):
                     .replace('Ausverkauft','Sold out').replace('Kontostand','Account Balance'))
         with patch('test_checkout.fixture',english):
             self.assertEqual(adapters.inspect(english('bero.html'),adapters.PRESETS['bero'])['status'],'out_of_stock')
-            report=checkout.inspect_checkout(Merchant(stock=True),self.policy)
+            report=bero.preflight(Merchant(stock=True),BERO_CFG,self.policy)
             self.assertEqual(report['status'],'ready')
-            self.assertEqual(checkout.execute_purchase(Merchant(stock=True),self.policy,self.id)['status'],'purchased')
+            self.assertEqual(bero.purchase(Merchant(stock=True),BERO_CFG,self.policy,self.id)['status'],'purchased')
 
     def test_store_page_problem_is_reported_specifically(self):
         merchant=Merchant(stock=True)
         changed=fixture('bero.html').replace('120 GB','240 GB')
         merchant.request=lambda path,**k:changed
-        with self.assertRaisesRegex(checkout.PreflightError,'商品页检查未通过'):
-            checkout.inspect_checkout(merchant,self.policy)
+        with self.assertRaisesRegex(bero.PreflightError,'商品页检查未通过'):
+            bero.preflight(merchant,BERO_CFG,self.policy)
 
     def test_duplicated_or_nested_package_card(self):
         import test_checkout
         doubled=lambda: test_checkout.initial().replace('</div>',fixture('bero.html')+'</div>',1)
         for page in (doubled(),test_checkout.initial().replace('Anniversary M','Anniversary M <button wire:click="selectPackage(109)">Select</button>',1)):
             merchant=Merchant(stock=True);original=merchant.request
-            merchant.request=lambda path,_o=original,_p=page,**k:_p if not k and path==checkout.STORE else _o(path,**k)
-            self.assertEqual(checkout.inspect_checkout(merchant,self.policy)['status'],'ready')
+            merchant.request=lambda path,_o=original,_p=page,**k:_p if not k and path==TARGET.store else _o(path,**k)
+            self.assertEqual(bero.preflight(merchant,BERO_CFG,self.policy)['status'],'ready')
 
     def test_resumes_from_order_state_left_on_overview(self):
         import html as h, test_checkout
@@ -204,16 +212,16 @@ class PurchaseTests(unittest.TestCase):
               {'components':[{'snapshot':test_checkout.snapshot(500,package=108),'effects':{'html':fixture('bero.html')}}]}]
         calls=[]
         def request(path,**k):
-            if not k and path==checkout.STORE:return start
+            if not k and path==TARGET.store:return start
             if k and back:calls.append(k['json_payload']['components'][0]['calls'][0]['method']);return back.pop(0)
             return original(path,**k)
         merchant.request=request
-        report=checkout.inspect_checkout(merchant,self.policy)
+        report=bero.preflight(merchant,BERO_CFG,self.policy)
         self.assertEqual(calls,['jumpToStep','backFromConfiguration']);self.assertEqual(report['status'],'ready')
 
     def test_money_parser(self):
-        self.assertEqual(str(checkout.money('1.044,10')),'1044.10');self.assertEqual(str(checkout.money('44.10')),'44.10')
+        self.assertEqual(str(bero.money('1.044,10')),'1044.10');self.assertEqual(str(bero.money('44.10')),'44.10')
         for bad in ('44','4,4','-1,00','1e3'):
-            with self.assertRaises(checkout.PreflightError):checkout.money(bad)
+            with self.assertRaises(bero.PreflightError):bero.money(bad)
 
 if __name__=='__main__':unittest.main()

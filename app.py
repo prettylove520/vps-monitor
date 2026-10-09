@@ -12,6 +12,7 @@ import notifications
 import purchases
 import accounts
 import checkout
+import merchants
 from network import FetchError
 from store import db, setting, secret, task_dict, log
 
@@ -106,9 +107,10 @@ def dashboard():
     for task in tasks:
         task['purchase_policy']=purchases.policy_for(task['id'])
         task['checkout_preflight']=checkout.latest(task['id'])
-    attempt=purchases.last_attempt()
+        task['purchase_attempt']=purchases.attempt_for(task['id'])
+        task['checkout_supported']=bool(getattr(merchants.REGISTRY.get(task['config']['adapter']),'SUPPORTS_CHECKOUT',False))
     heartbeat=float(setting('worker_heartbeat','0'))
-    return jsonify(tasks=tasks,logs=logs,presets=adapters.PRESETS,purchase_attempt=attempt,
+    return jsonify(tasks=tasks,logs=logs,presets=adapters.PRESETS,
                    worker_online=time.time()-heartbeat<180,worker_heartbeat=heartbeat,
                    notifications_configured=bool(notifications.configured_channels()),
                    telegram_configured=bool(setting('telegram_token') and setting('telegram_chat')))
@@ -149,7 +151,7 @@ def purchase_policy(id):
 @auth
 def arm_purchase(id):
     policy=purchases.arm(id,(request.get_json() or {}).get('confirm_total'))
-    log(id,'warning','已启用自动付款：补货时用 BERO 余额自动下单一次，上限 €'+policy['max_total'])
+    log(id,'warning','已启用自动付款：补货时用商家账户余额自动下单一次，上限 %s %s'%(policy['max_total'],policy.get('currency','')))
     return jsonify(policy=policy)
 
 @app.post('/api/tasks/<int:id>/purchase/disarm')
@@ -161,11 +163,11 @@ def disarm_purchase(id):
     log(id,'info','已关闭自动付款')
     return jsonify(policy=policy)
 
-@app.post('/api/purchase-attempts/clear')
+@app.post('/api/tasks/<int:id>/purchase-attempts/clear')
 @auth
-def clear_purchase_attempts():
-    purchases.clear_attempts((request.get_json() or {}).get('confirm'))
-    log(None,'info','已清除购买记录；可以重新启用自动付款')
+def clear_purchase_attempts(id):
+    purchases.clear_attempts(id,(request.get_json() or {}).get('confirm'))
+    log(id,'info','已清除购买记录；可以重新启用自动付款')
     return jsonify(ok=True)
 
 @app.post('/api/tasks/<int:id>/checkout-preflight')

@@ -5,3 +5,4 @@
 
 .preflightfacts{white-space:pre-line;padding:16px 0;line-height:1.9}#preflightJson{font-family:monospace;font-size:.75rem;resize:vertical}#preflightDialog .dialogfoot{flex-wrap:wrap}.taskactions{flex-wrap:wrap}
 #purchaseDialog{overflow-y:auto}#purchaseDialog .dialogbody{max-height:none}.armsection{border-top:1px solid var(--line)}.armsection h3{margin:0 0 12px;font-size:1.05rem}.banner.ok{border-left-color:#2f9a6c;background:#e7f6ee;color:#1d6447}.tag.armed{background:#daf5e6;color:#147241;font-weight:600}.tag.warn{background:#ffebe6;color:#a14e35}#attemptBox{margin-top:18px}
+#purchaseRules{white-space:pre-line}
