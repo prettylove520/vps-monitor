@@ -1,0 +1,23 @@
+[Unit]
+Description=VPS Watch stock worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=vpswatch
+Group=vpswatch
+WorkingDirectory=/opt/vps-watch
+EnvironmentFile=/etc/vps-watch.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/vps-watch/.venv/bin/python worker.py
+Restart=on-failure
+RestartSec=10
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/vps-watch
+
+[Install]
+WantedBy=multi-user.target

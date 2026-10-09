@@ -1,0 +1,23 @@
+[Unit]
+Description=VPS Watch dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=vpswatch
+Group=vpswatch
+WorkingDirectory=/opt/vps-watch
+EnvironmentFile=/etc/vps-watch.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/vps-watch/.venv/bin/gunicorn --workers 1 --threads 4 --bind 127.0.0.1:18080 --timeout 60 app:app
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/vps-watch
+
+[Install]
+WantedBy=multi-user.target

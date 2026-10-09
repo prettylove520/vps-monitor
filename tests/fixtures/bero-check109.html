@@ -1,0 +1,67 @@
+<!-- Structure recorded from the live BERO "CHECK" step (step 1400, 2026-10-09) on an in-stock vServer,
+     with the Anniversary M configuration and coupon price substituted. Snapshot/token attributes removed. -->
+<div class="d-flex justify-content-center">
+    <div style="width: 82%; max-width: 950px;">
+        <div class="fw-bold bero-order-progress-bar-container-konfiguration text-white">KONFIGURATION</div>
+        <div class="fw-bold bero-order-progress-bar-container-overview text-white">ÜBERBLICK</div>
+        <div class="fw-bold bero-order-progress-bar-container-anmeldung text-white">ANMELDUNG</div>
+        <div class="fw-bold bero-order-progress-bar-container-payment text-white">BEZAHLUNG</div>
+        <div class="fw-bold bero-order-progress-bar-container-final color-bero-orange">ÜBERPRÜFEN</div>
+    </div>
+</div>
+<div class="text-start">
+    <h2 class="text-white text-center fw-bold"><span class="color-bero-orange">BERO HOST</span> EMPFIEHLT DIR</h2>
+    <div class="d-flex justify-content-center mb-3">
+        <div class="default-border-radius default-package-background bero-orange-border max-width-700 p-3">
+            <h4 class="text-white fw-bold">Anniversary M</h4>
+            <div class="bero-order-configuration-price-grid">
+                <div class="default-bubble-background default-border-radius p-3">
+                    <div>
+                        <h6 class="text-white fw-bold">Konfiguration</h6>
+                        <div class="d-flex text-white"><span class="me-2 fw-bold">CPU: </span><span class="">4 Kerne</span></div>
+                        <div class="d-flex text-white"><span class="me-2 fw-bold">RAM: </span><span class="">12 GB</span></div>
+                        <div class="d-flex text-white"><span class="me-2 fw-bold">NVME: </span><span class="">120 GB</span></div>
+                        <div class="d-flex text-white"><span class="me-2 fw-bold">IPv4: </span><span class="">1 Adresse</span></div>
+                        <div class="d-flex text-white"><span class="me-2 fw-bold">IPv6: </span><span class="">1 /64 Netz</span></div>
+                        <div class="d-flex text-white"><span class="me-2 fw-bold">Backups: </span><span class="">3 Slots</span></div>
+                        <div class="d-flex text-white"><span class="me-2 fw-bold">Laufzeit: </span><span class="">365 Tage</span></div>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-rows: 1fr; gap: 10px;">
+                    <div class="default-bubble-background default-border-radius p-3 text-white d-flex flex-column justify-content-between">
+                        <div><h6 class="m-0 fw-bold">Preis:</h6></div>
+                        <div>
+                            <div>
+                                <p class="text-white fw-bold fs-3 m-0">
+                                    44,10 € <small class="bero-font-size-0-5"> INKL. MWST. </small>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="default-bubble-background default-border-radius p-3 text-white">
+                <div class="d-flex">
+                    <div class="col-1 d-flex justify-content-center align-items-center">
+                        <input type="checkbox" class="bero-order-checkbox-size-1-5" id="bero-order-accept-terms-checkbox" wire:click="toggleAgbConfirmation">
+                    </div>
+                    <div class="col-11">
+                        <label class="ms-2" for="bero-order-accept-terms-checkbox">
+                            Ich bestätige, dass ich die AGB, die Widerrufsbelehrung und die Datenschutzerklärung gelesen habe und akzeptiere.
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="d-flex justify-content-center align-items-center">
+        <button class="btn default-button-secondary w-auto mx-2" wire:click.prevent="jumpToStep(1100)">
+            ZURÜCK
+        </button>
+        <form wire:submit="jumpToStep(1500)">
+            <button class="btn default-button w-auto mx-2" type="submit">
+                JETZT BESTELLEN
+            </button>
+        </form>
+    </div>
+</div>
