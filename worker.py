@@ -1,4 +1,5 @@
 import json
+from concurrent.futures import ThreadPoolExecutor
 import random
 import time
 from urllib.parse import urlsplit
@@ -117,12 +118,7 @@ def perform(row,cfg):
     if updated:
         log(row['id'],'warning' if status in ('blocked','error') else 'info',detail)
         if status=='blocked' or failures==3:
-            try:
-                report=notifications.send(f"监控异常：{cfg['name']}\n{detail}\n"+('任务已暂停。' if status=='blocked' else '正在退避重试。'),urgent=False,url=cfg['url'])
-                if report['failed']:
-                    log(row['id'],'warning','异常通知：'+'；'.join(report['failed'].values()))
-            except ValueError:
-                pass
+            background(plain_notice,row['id'],'异常通知',f"监控异常：{cfg['name']}\n{detail}\n"+('任务已暂停。' if status=='blocked' else '正在退避重试。'),url=cfg['url'])
 
 NOTICES={
  'purchased':('✅ 已自动下单：{name}',True),
@@ -135,7 +131,29 @@ NOTICES={
 }
 HEALTH_INTERVAL=6*3600
 
+NOTIFIER=ThreadPoolExecutor(max_workers=2,thread_name_prefix='notify')
+
+def background(fn,*args,**kwargs):
+    """Send a notice without holding up stock checks or the next purchase job."""
+    def run():
+        try:
+            fn(*args,**kwargs)
+        except Exception:
+            log(None,'warning','后台通知发送失败')
+    return NOTIFIER.submit(run)
+
+def plain_notice(task_id,label,message,url=''):
+    try:
+        report=notifications.send(message,urgent=False,url=url)
+        if report['failed']:
+            log(task_id,'warning',label+'：'+'；'.join(report['failed'].values()))
+    except ValueError:
+        pass
+
 def checkout_notice(task_id,mode,result):
+    background(_checkout_notice,task_id,mode,result)
+
+def _checkout_notice(task_id,mode,result):
     """Push the outcome of purchases, and of health preflights that found a broken flow."""
     status=result.get('status')
     if mode=='purchase':
@@ -192,12 +210,7 @@ def main():
             message=accounts.maintain()
             if message:
                 log(None,'warning','BERO 登录：'+message)
-                try:
-                    report=notifications.send('BERO 登录需要处理：\n'+message+'\n补货监控继续运行；未下单或付款。',urgent=False)
-                    if report['failed']:
-                        log(None,'warning','BERO 登录异常通知：'+'；'.join(report['failed'].values()))
-                except ValueError:
-                    pass
+                background(plain_notice,None,'BERO 登录异常通知','BERO 登录需要处理：\n'+message+'\n补货监控继续运行；未下单或付款。')
         except Exception:
             log(None,'warning','BERO 会话检查暂时失败')
         try:

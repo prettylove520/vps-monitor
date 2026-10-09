@@ -21,6 +21,28 @@ with db() as c:
     if 'mode' not in columns:
         c.execute("ALTER TABLE checkout_preflights ADD COLUMN mode TEXT NOT NULL DEFAULT 'preflight'")
 
+    c.execute('''CREATE TABLE IF NOT EXISTS checkout_history (
+        id INTEGER PRIMARY KEY, task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+        mode TEXT NOT NULL, state TEXT NOT NULL, status TEXT, message TEXT,
+        started REAL, finished REAL NOT NULL, result TEXT)''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_checkout_history_task ON checkout_history(task_id,id)')
+
+HISTORY_KEEP=30
+HISTORY_FIELDS=('order_submitted','paid','final_total_eur','overview_total_eur','balance_sufficient','coupon_accepted')
+
+def history(task_id,limit=HISTORY_KEEP):
+    with db() as c:
+        rows=c.execute('SELECT * FROM checkout_history WHERE task_id=? ORDER BY id DESC LIMIT ?',(task_id,limit)).fetchall()
+    return [{k:row[k] for k in ('id','mode','state','status','message','started','finished')}|
+            {k:v for k,v in json.loads(row['result'] or '{}').items() if k in HISTORY_FIELDS} for row in rows]
+
+def _record_history(c,row,state,result):
+    c.execute('INSERT INTO checkout_history(task_id,mode,state,status,message,started,finished,result) VALUES (?,?,?,?,?,?,?,?)',
+              (row['task_id'],row['mode'],state,result.get('status'),result.get('message'),row.get('started'),time.time(),
+               json.dumps({k:result.get(k) for k in HISTORY_FIELDS},ensure_ascii=False)))
+    c.execute('''DELETE FROM checkout_history WHERE task_id=? AND id NOT IN
+                 (SELECT id FROM checkout_history WHERE task_id=? ORDER BY id DESC LIMIT ?)''',(row['task_id'],row['task_id'],HISTORY_KEEP))
+
 class JobError(ValueError):
     pass
 
@@ -127,6 +149,8 @@ def run_next(notify=None):
                 result={'status':'outdated','message':'任务在执行期间发生变化，本次结果作废','order_submitted':False,'paid':False}
             updated=c.execute("UPDATE checkout_preflights SET state=?,result=?,finished=? WHERE task_id=? AND created=? AND state='running'",
                       (state,json.dumps(result,ensure_ascii=False),time.time(),row['task_id'],row['created'])).rowcount
+            if updated or result.get('order_submitted'):
+                _record_history(c,row|{'started':now},state,result)
         c.execute("UPDATE hosts SET next_check=MAX(next_check,?) WHERE host=?",(time.time()+15,hostname))
     if updated or result.get('order_submitted'):
         level='info' if result.get('status') in ('ready','out_of_stock','purchased') else 'warning'

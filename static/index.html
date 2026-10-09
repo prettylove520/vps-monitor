@@ -436,7 +436,7 @@
       <div class="dialoghead">
         <div>
           <p class="eyebrow">CHECKOUT PREFLIGHT</p>
-          <h2>结账预检</h2>
+          <h2>结账预检与记录</h2>
         </div>
         <button type="button" id="closePreflight" class="iconbutton" aria-label="关闭">×</button>
       </div>
@@ -449,6 +449,8 @@
         </p>
         <label>预检结果（不包含密码或 Cookie）<textarea id="preflightJson" rows="8" readonly></textarea></label>
         <p id="preflightError" class="error" role="alert"></p>
+        <h3 class="historytitle">最近记录（预检和自动下单，保留 30 条）</h3>
+        <ul id="preflightHistory" class="historylist"></ul>
       </div>
       <div class="dialogfoot">
         <button type="button" id="copyPreflight" class="secondary">复制结果</button

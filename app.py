@@ -212,6 +212,11 @@ def enqueue_preflight(id):
     checkout.enqueue(id)
     return jsonify(state='queued'),202
 
+@app.get('/api/tasks/<int:id>/checkout-history')
+@auth
+def checkout_history(id):
+    return jsonify(checkout.history(id))
+
 @app.get('/api/tasks/<int:id>/checkout-preflight')
 @auth
 def preflight_status(id):

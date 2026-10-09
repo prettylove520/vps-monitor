@@ -536,13 +536,43 @@ async function loadPreflight() {
   const generation = preflightGeneration,
     id = preflightTask;
   try {
-    const job = await api('/tasks/' + id + '/checkout-preflight');
-    if (generation === preflightGeneration) showPreflight(job);
+    const [job, runs] = await Promise.all([
+      api('/tasks/' + id + '/checkout-preflight'),
+      api('/tasks/' + id + '/checkout-history'),
+    ]);
+    if (generation === preflightGeneration) {
+      showPreflight(job);
+      showHistory(runs);
+    }
   } catch (e) {
     if (generation === preflightGeneration) $('#preflightError').textContent = e.message;
   } finally {
     preflightLoading = false;
   }
+}
+function showHistory(runs) {
+  const statusText = {
+    ready: '确认页已核实',
+    out_of_stock: '缺货',
+    purchased: '已下单',
+    uncertain: '结果不确定',
+    error: '失败',
+    coupon_rejected: '优惠码未生效',
+    price_exceeded: '价格超限',
+    insufficient_balance: '余额不足',
+    unexpected_flow: '流程变化',
+    needs_checkout_adapter: '流程变化',
+    outdated: '已作废',
+  };
+  $('#preflightHistory').innerHTML = runs.length
+    ? runs
+        .map(
+          r => `<li class="${r.order_submitted ? 'submitted' : ''}"><time>${esc(time(r.finished))}</time><span class="tag">${
+            r.mode === 'purchase' ? '下单' : '预检'
+          }</span><strong>${esc(statusText[r.status] || r.status || r.state)}</strong><span>${esc(r.message || '')}</span></li>`
+        )
+        .join('')
+    : '<li class="empty">还没有记录</li>';
 }
 async function openPreflight(id) {
   preflightTask = id;

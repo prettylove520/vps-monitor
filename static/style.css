@@ -922,3 +922,43 @@ dialog::backdrop {
   background: #e7f6ee;
   color: #1d6447;
 }
+.historytitle {
+  font-size: 0.95rem;
+  margin: 18px 0 8px;
+}
+.historylist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.historylist li {
+  display: grid;
+  grid-template-columns: 150px 44px 96px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  padding: 9px 12px;
+  border-bottom: 1px solid #edf1ef;
+  font-size: 0.8rem;
+}
+.historylist li:last-child {
+  border-bottom: 0;
+}
+.historylist li.submitted {
+  background: #fff7e8;
+}
+.historylist li.empty {
+  display: block;
+  color: var(--muted);
+}
+.historylist time {
+  color: #869594;
+}
+@media (max-width: 640px) {
+  .historylist li {
+    grid-template-columns: 1fr auto;
+  }
+}

@@ -132,12 +132,36 @@ class PurchaseTests(unittest.TestCase):
 
     def test_notice_texts(self):
         with patch('worker.notifications.send',return_value={'sent':['bark'],'failed':{},'complete':True}) as send:
-            worker.checkout_notice(self.id,'purchase',{'status':'purchased','message':'ok','final_total_eur':'44.10'})
-            worker.checkout_notice(self.id,'purchase',{'status':'out_of_stock','message':'x'})
-            worker.checkout_notice(self.id,'preflight',{'status':'ready','message':'x','balance_sufficient':True})
-            worker.checkout_notice(self.id,'preflight',{'status':'error','message':'changed'})
+            worker._checkout_notice(self.id,'purchase',{'status':'purchased','message':'ok','final_total_eur':'44.10'})
+            worker._checkout_notice(self.id,'purchase',{'status':'out_of_stock','message':'x'})
+            worker._checkout_notice(self.id,'preflight',{'status':'ready','message':'x','balance_sufficient':True})
+            worker._checkout_notice(self.id,'preflight',{'status':'error','message':'changed'})
         self.assertEqual(send.call_count,2)
         self.assertTrue(send.call_args_list[0].kwargs['urgent']);self.assertFalse(send.call_args_list[1].kwargs['urgent'])
+
+    def test_notices_run_in_background(self):
+        with patch('worker.notifications.send',return_value={'sent':['bark'],'failed':{},'complete':True}) as send:
+            worker.background(worker._checkout_notice,self.id,'purchase',{'status':'purchased','message':'ok'}).result(timeout=5)
+        send.assert_called_once()
+
+    def test_history_keeps_recent_runs_without_secrets(self):
+        for i in range(3):
+            with db() as c:c.execute('DELETE FROM checkout_preflights');c.execute('DELETE FROM hosts')
+            checkout.enqueue(self.id,'preflight')
+            with patch('merchants.bero.accounts.checkout_session') as session:
+                session.return_value.__enter__.return_value=Merchant()
+                checkout.run_next()
+        rows=checkout.history(self.id)
+        self.assertEqual(len(rows),3);self.assertEqual(rows[0]['status'],'out_of_stock')
+        self.assertEqual(rows[0]['overview_total_eur'],'44.10');self.assertNotIn('stages',rows[0])
+        self.assertEqual(self.client.get(f'/api/tasks/{self.id}/checkout-history').json[0]['mode'],'preflight')
+        with patch('checkout.HISTORY_KEEP',2):
+            with db() as c:c.execute('DELETE FROM checkout_preflights');c.execute('DELETE FROM hosts')
+            checkout.enqueue(self.id,'preflight')
+            with patch('merchants.bero.accounts.checkout_session') as session:
+                session.return_value.__enter__.return_value=Merchant()
+                checkout.run_next()
+        self.assertEqual(len(checkout.history(self.id)),2)
 
     def test_health_check_queues_dry_run_every_interval(self):
         with db() as c:c.execute("DELETE FROM settings WHERE key='checkout_health_last'")
