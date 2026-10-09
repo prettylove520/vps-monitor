@@ -35,7 +35,9 @@ async function api(path, method = 'GET', body) {
     if (r.status === 401 && path != '/login') {
       showLogin();
     }
-    throw new Error(v.error || '请求失败');
+    const error = new Error(v.error || '请求失败');
+    error.data = v;
+    throw error;
   }
   return v;
 }
@@ -67,13 +69,19 @@ $('#loginForm').addEventListener('submit', async e => {
   const b = e.submitter;
   b.disabled = true;
   try {
-    const s = await api('/login', 'POST', { password: $('#password').value });
+    const s = await api('/login', 'POST', { password: $('#password').value, code: $('#loginCode').value });
     csrf = s.csrf;
     $('#password').value = '';
+    $('#loginCode').value = '';
+    $('#codeField').hidden = true;
     $('#loginError').textContent = '';
     await boot();
   } catch (e) {
     $('#loginError').textContent = e.message;
+    if (e.data?.totp_required) {
+      $('#codeField').hidden = false;
+      $('#loginCode').focus();
+    }
   } finally {
     b.disabled = false;
   }
@@ -178,11 +186,15 @@ async function switchView(view) {
   const generation = ++settingsGeneration;
   document.querySelectorAll('.view').forEach(x => (x.hidden = x.id !== view + 'View'));
   document.querySelectorAll('[data-view]').forEach(x => x.classList.toggle('selected', x.dataset.view === view));
-  $('#pageName').textContent = { tasks: '监控任务', logs: '检查日志', accounts: '商家账户', settings: '通知设置' }[
+  $('#pageName').textContent = { tasks: '监控任务', logs: '检查日志', accounts: '商家账户', settings: '通知设置', security: '安全' }[
     view
   ];
   if (view === 'accounts') {
     await loadAccount(generation);
+    return;
+  }
+  if (view === 'security') {
+    await loadSecurity();
     return;
   }
   if (view !== 'settings') return;
@@ -720,3 +732,53 @@ $('#wechatChannels').addEventListener('click', async e => {
     b.disabled = false;
   }
 });
+
+async function loadSecurity() {
+  $('#totpSetup').hidden = true;
+  $('#securityError').textContent = '';
+  try {
+    const s = await api('/security');
+    $('#totpState').textContent = s.totp_enabled ? '已启用：登录时需要输入手机验证器中的 6 位验证码' : '未启用';
+    $('#totpState').classList.toggle('ok', s.totp_enabled);
+    $('#totpStart').hidden = s.totp_enabled;
+    $('#totpDisableForm').hidden = !s.totp_enabled;
+  } catch (e) {
+    $('#securityError').textContent = e.message;
+  }
+}
+$('#totpStart').onclick = async () => {
+  $('#securityError').textContent = '';
+  try {
+    const s = await api('/security/totp/setup', 'POST', {});
+    $('#totpQr').src = s.qr;
+    $('#totpSecret').textContent = s.secret.replace(/(.{4})/g, '$1 ').trim();
+    $('#totpSetup').hidden = false;
+    $('#totpCode').value = '';
+    $('#totpCode').focus();
+  } catch (e) {
+    $('#securityError').textContent = e.message;
+  }
+};
+$('#totpConfirm').onclick = async () => {
+  $('#securityError').textContent = '';
+  try {
+    await api('/security/totp/enable', 'POST', { code: $('#totpCode').value });
+    toast('两步验证已启用；下次登录需要验证码');
+    await loadSecurity();
+  } catch (e) {
+    $('#securityError').textContent = e.message;
+  }
+};
+$('#totpDisableForm').onsubmit = async e => {
+  e.preventDefault();
+  $('#securityError').textContent = '';
+  try {
+    await api('/security/totp/disable', 'POST', { password: $('#totpPassword').value, code: $('#totpDisableCode').value });
+    $('#totpPassword').value = '';
+    $('#totpDisableCode').value = '';
+    toast('两步验证已关闭');
+    await loadSecurity();
+  } catch (e) {
+    $('#securityError').textContent = e.message;
+  }
+};

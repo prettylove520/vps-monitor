@@ -9,7 +9,7 @@ install -d -m 755 /opt/vps-watch /opt/vps-watch/static /opt/vps-watch/merchants
 install -d -m 700 -o vpswatch -g vpswatch /var/lib/vps-watch
 if systemctl is-active --quiet vps-watch-web; then systemctl stop vps-watch-web; fi
 if systemctl is-active --quiet vps-watch-worker; then systemctl stop vps-watch-worker; fi
-for f in app.py store.py network.py adapters.py notifications.py purchases.py accounts.py checkout.py worker.py manage.py verify-web.py requirements.txt; do install -m 644 "$f" "/opt/vps-watch/$f"; done
+for f in *.py requirements.txt; do install -m 644 "$f" "/opt/vps-watch/$f"; done
 install -m 644 static/* /opt/vps-watch/static/
 install -m 644 merchants/*.py /opt/vps-watch/merchants/
 python3 -m venv /opt/vps-watch/.venv

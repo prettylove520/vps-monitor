@@ -22,6 +22,9 @@
             autocomplete="current-password"
             required
             minlength="12" /></label
+        ><label id="codeField" hidden
+          >两步验证码<input id="loginCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位数字"
+        /></label
         ><button class="primary" type="submit">登录工作台</button>
         <p id="loginError" role="alert"></p>
       </form>
@@ -36,7 +39,8 @@
           <button class="navitem selected" data-view="tasks">▦ <span>监控任务</span><span id="navCount">0</span></button
           ><button class="navitem" data-view="logs">≡ <span>检查日志</span></button
           ><button class="navitem" data-view="accounts">◎ <span>商家账户</span></button
-          ><button class="navitem" data-view="settings">⚙ <span>通知设置</span></button>
+          ><button class="navitem" data-view="settings">⚙ <span>通知设置</span></button
+          ><button class="navitem" data-view="security">⛨ <span>安全</span></button>
         </nav>
         <div class="sidefoot">
           <span class="mini">运行于你的 VPS</span><strong id="workerStatus">正在连接后台…</strong
@@ -144,6 +148,40 @@
               验证只登录并检查会话，不创建订单或扣款。购买执行仍关闭，账户验证通过后还需核实真实结账流程。
             </p>
           </form>
+        </section>
+        <section id="securityView" class="view" hidden>
+          <div class="titlebar">
+            <div>
+              <p class="eyebrow">SECURITY</p>
+              <h1>安全</h1>
+              <p class="muted">后台保存着商家密码和登录会话，建议开启两步验证。</p>
+            </div>
+          </div>
+          <div class="settingscard">
+            <div class="settinghead">
+              <span class="telegramIcon">2FA</span>
+              <div>
+                <h2>两步验证（TOTP）</h2>
+                <p class="muted">支持 Google Authenticator、Microsoft Authenticator、1Password 等验证器 App。</p>
+              </div>
+            </div>
+            <p id="totpState" class="banner">正在加载…</p>
+            <button id="totpStart" type="button" class="primary" hidden>开始绑定</button>
+            <div id="totpSetup" hidden>
+              <p class="help">用验证器 App 扫描二维码；无法扫码时手动输入下面的密钥。然后填入 App 显示的 6 位验证码确认。</p>
+              <img id="totpQr" class="totpqr" alt="两步验证二维码" />
+              <p class="totpsecret"><code id="totpSecret"></code></p>
+              <label>6 位验证码<input id="totpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" /></label>
+              <button id="totpConfirm" type="button" class="primary">确认启用</button>
+            </div>
+            <form id="totpDisableForm" hidden>
+              <label>管理员密码<input id="totpPassword" type="password" autocomplete="current-password" required /></label>
+              <label>当前验证码<input id="totpDisableCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required /></label>
+              <button type="submit" class="secondary">关闭两步验证</button>
+            </form>
+            <p id="securityError" class="error" role="alert"></p>
+            <p class="help">手机丢失时，在服务器上执行 <code>manage.py disable-2fa</code> 关闭两步验证（Docker：<code>docker compose run --rm web python manage.py disable-2fa</code>）。</p>
+          </div>
         </section>
         <section id="settingsView" class="view" hidden>
           <div class="titlebar">

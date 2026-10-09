@@ -903,3 +903,22 @@ dialog::backdrop {
   align-items: center;
   margin-bottom: 12px;
 }
+.totpqr {
+  display: block;
+  width: 200px;
+  height: 200px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 8px 0 12px;
+}
+.totpsecret code {
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  word-break: break-all;
+}
+#securityView .banner.ok {
+  border-left-color: #2f9a6c;
+  background: #e7f6ee;
+  color: #1d6447;
+}

@@ -13,6 +13,7 @@ import purchases
 import accounts
 import checkout
 import merchants
+import twofactor
 from network import FetchError
 from store import db, setting, secret, task_dict, log
 
@@ -85,12 +86,47 @@ def login():
     stored=setting('admin_password')
     if not stored or not check_password_hash(stored,password):
         return jsonify(error='密码不正确或尚未初始化管理员'),401
+    if twofactor.enabled():
+        code=(request.get_json() or {}).get('code','')
+        if not code:
+            return jsonify(error='请输入手机验证器中的 6 位验证码',totp_required=True),401
+        if not twofactor.verify(code):
+            return jsonify(error='验证码不正确或已使用过',totp_required=True),401
     with db() as c:
         c.execute('DELETE FROM attempts WHERE ip=?',(ip,))
     session.clear()
     session.update(admin=True,csrf=secrets.token_urlsafe(32))
     session.permanent=True
     return jsonify(ok=True,csrf=session['csrf'])
+
+@app.get('/api/security')
+@auth
+def security_status():
+    return jsonify(totp_enabled=twofactor.enabled())
+
+@app.post('/api/security/totp/setup')
+@auth
+def totp_setup():
+    return jsonify(twofactor.begin_setup())
+
+@app.post('/api/security/totp/enable')
+@auth
+def totp_enable():
+    twofactor.finish_setup((request.get_json() or {}).get('code',''))
+    log(None,'info','已启用管理员两步验证')
+    return jsonify(totp_enabled=True)
+
+@app.post('/api/security/totp/disable')
+@auth
+def totp_disable():
+    data=request.get_json() or {}
+    stored=setting('admin_password')
+    password=data.get('password','')
+    if not isinstance(password,str) or not stored or not check_password_hash(stored,password):
+        raise ValueError('管理员密码不正确')
+    twofactor.disable(data.get('code',''))
+    log(None,'warning','已关闭管理员两步验证')
+    return jsonify(totp_enabled=False)
 
 @app.post('/api/logout')
 @auth
