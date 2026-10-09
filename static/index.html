@@ -61,7 +61,7 @@
             后台检查进程未运行。任务可以保存，但暂时不会检查库存，请按部署说明启动 worker 服务。
           </div>
           <div id="telegramWarning" class="banner" hidden>
-            尚未启用通知。到「通知设置」连接 Telegram 或 Bark，即可接收补货提醒。
+            尚未启用通知。到「通知设置」连接 Bark、微信或 Telegram，即可接收补货提醒。
           </div>
           <div class="stats">
             <div><span>全部任务</span><strong id="total">0</strong><small>集中管理你的目标套餐</small></div>
@@ -150,7 +150,7 @@
             <div>
               <p class="eyebrow">NOTIFICATIONS</p>
               <h1>通知设置</h1>
-              <p class="muted">Telegram 与 Bark 可单独使用，也可同时接收提醒。</p>
+              <p class="muted">Bark、微信（PushPlus / Server酱 / 企业微信）与 Telegram 可单独使用，也可同时接收提醒。</p>
             </div>
           </div>
           <form id="barkForm" class="settingscard">
@@ -218,6 +218,19 @@
               测试使用已保存设置，点击后手机可能持续响铃 30 秒。显示发送成功表示 Bark 服务端已接收，实际送达以手机为准。
             </p>
           </form>
+          <section id="wechatCard" class="settingscard">
+            <div class="settinghead">
+              <span class="telegramIcon wechatIcon">微</span>
+              <div>
+                <h2>微信推送</h2>
+                <p class="muted">三种方式任选其一或同时启用，填写后先发测试消息。</p>
+              </div>
+            </div>
+            <div id="wechatChannels"></div>
+            <p class="help">
+              PushPlus：在 pushplus.plus 微信扫码登录后复制 token。Server酱：在 sct.ftqq.com 复制 SendKey。企业微信：群聊 → 添加群机器人，复制 Webhook 地址。密钥加密保存在 VPS 上，保存后不会返回网页。
+            </p>
+          </section>
           <form id="settingsForm" class="settingscard">
             <div class="settinghead">
               <span class="telegramIcon">T</span>

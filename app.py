@@ -253,6 +253,32 @@ def test_bark_notification():
     notifications.send_bark('Bark 测试提醒：请确认手机收到并按设置响铃。此消息不代表补货或已下单。')
     return jsonify(ok=True)
 
+@app.get('/api/settings/wechat')
+@auth
+def wechat_settings():
+    return jsonify(notifications.wechat_settings())
+
+@app.put('/api/settings/wechat')
+@auth
+def update_wechat_settings():
+    notifications.save_wechat(request.get_json())
+    return jsonify(notifications.wechat_settings())
+
+@app.post('/api/settings/wechat/test')
+@auth
+def test_wechat_notification():
+    channel=(request.get_json() or {}).get('channel')
+    if channel not in notifications.WECHAT:
+        raise ValueError('请选择微信推送渠道')
+    notifications.send_wechat(channel,'VPS Watch 测试通知\n连接正常。此消息不代表补货或已下单。')
+    return jsonify(ok=True)
+
+@app.delete('/api/settings/wechat/<channel>')
+@auth
+def delete_wechat_settings(channel):
+    notifications.delete_wechat(channel)
+    return jsonify(notifications.wechat_settings())
+
 @app.get('/api/accounts/bero')
 @auth
 def bero_account_status():

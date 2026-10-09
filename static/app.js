@@ -190,8 +190,9 @@ async function switchView(view) {
   $('#barkState').textContent = '正在加载设置…';
   $('#tokenState').textContent = '正在加载设置…';
   try {
-    const [s, b] = await Promise.all([api('/settings'), api('/settings/bark')]);
+    const [s, b, w] = await Promise.all([api('/settings'), api('/settings/bark'), api('/settings/wechat')]);
     if (generation !== settingsGeneration) return;
+    renderWechat(w);
     $('#chatId').value = s.chat_id;
     $('#telegramEnabled').checked = s.enabled;
     $('#tokenState').textContent = s.token_saved
@@ -665,3 +666,54 @@ setInterval(() => {
   if (!document.hidden) refresh();
 }, 10000);
 boot();
+
+function renderWechat(channels) {
+  $('#wechatChannels').innerHTML = Object.entries(channels)
+    .map(
+      ([name, c]) => `<div class="wechatrow" data-channel="${esc(name)}">
+        <div class="wechathead"><strong>${esc(c.label)}</strong><span class="tag ${c.enabled ? 'armed' : ''}">${
+          c.saved ? (c.enabled ? '已启用' : '已保存 · 未启用') : '未配置'
+        }</span></div>
+        <label class="checklabel"><input type="checkbox" data-field="enabled" ${c.enabled || !c.saved ? 'checked' : ''}>启用</label>
+        <label>${esc(c.hint)}<input type="password" data-field="token" autocomplete="new-password" maxlength="300" placeholder="${
+          c.saved ? '已保存；留空保留' : '粘贴到这里'
+        }"></label>
+        <div class="actions"><button type="button" class="primary" data-wechat="save">保存</button><button type="button" class="secondary" data-wechat="test" ${
+          c.saved ? '' : 'disabled'
+        }>发送测试</button>${c.saved ? '<button type="button" class="secondary" data-wechat="delete">删除</button>' : ''}</div>
+      </div>`
+    )
+    .join('');
+}
+$('#wechatChannels').addEventListener('click', async e => {
+  const b = e.target.closest('[data-wechat]');
+  if (!b) return;
+  const row = b.closest('[data-channel]'),
+    channel = row.dataset.channel,
+    action = b.dataset.wechat;
+  b.disabled = true;
+  try {
+    if (action === 'save') {
+      renderWechat(
+        await api('/settings/wechat', 'PUT', {
+          channel,
+          token: row.querySelector('[data-field="token"]').value,
+          enabled: row.querySelector('[data-field="enabled"]').checked,
+        })
+      );
+      toast('微信推送设置已保存');
+      await refresh();
+    } else if (action === 'test') {
+      await api('/settings/wechat/test', 'POST', { channel });
+      toast('测试消息已发送，请查看微信');
+    } else if (action === 'delete' && confirm('删除这个渠道保存的密钥？')) {
+      renderWechat(await api('/settings/wechat/' + channel, 'DELETE', {}));
+      toast('已删除');
+      await refresh();
+    }
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    b.disabled = false;
+  }
+});

@@ -884,3 +884,22 @@ dialog::backdrop {
 #purchaseRules {
   white-space: pre-line;
 }
+#wechatCard {
+  margin-bottom: 24px;
+}
+.wechatIcon {
+  background: #e3f4e7;
+  color: #23884a;
+}
+.wechatrow {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 18px 18px;
+  margin-bottom: 14px;
+}
+.wechathead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
