@@ -111,6 +111,7 @@ function render() {
   $('#available').textContent = tasks.filter(t => t.status === 'available').length;
   $('#errors').textContent = tasks.filter(t => ['blocked', 'error'].includes(t.status)).length;
   $('#workerStatus').textContent = data.worker_online ? '后台检查运行中' : '后台检查未运行';
+  $('#appVersion').textContent = data.version ? 'v' + data.version : '';
   $('#workerWarning').hidden = data.worker_online;
   $('#telegramWarning').hidden = data.notifications_configured;
   renderTasks();
@@ -572,7 +573,7 @@ function showHistory(runs) {
           }</span><strong>${esc(statusText[r.status] || r.status || r.state)}</strong><span>${esc(r.message || '')}</span></li>`
         )
         .join('')
-    : '<li class="empty">还没有记录</li>';
+    : '<li class="historyempty">还没有记录</li>';
 }
 async function openPreflight(id) {
   preflightTask = id;
@@ -783,6 +784,7 @@ $('#totpStart').onclick = async () => {
     $('#totpQr').src = s.qr;
     $('#totpSecret').textContent = s.secret.replace(/(.{4})/g, '$1 ').trim();
     $('#totpSetup').hidden = false;
+    $('#totpStart').hidden = true;
     $('#totpCode').value = '';
     $('#totpCode').focus();
   } catch (e) {

@@ -950,7 +950,7 @@ dialog::backdrop {
 .historylist li.submitted {
   background: #fff7e8;
 }
-.historylist li.empty {
+.historylist li.historyempty {
   display: block;
   color: var(--muted);
 }
@@ -961,4 +961,12 @@ dialog::backdrop {
   .historylist li {
     grid-template-columns: 1fr auto;
   }
+}
+#totpSetup {
+  margin-top: 16px;
+}
+#totpStart,
+#totpConfirm,
+#totpDisableForm button {
+  margin-bottom: 16px;
 }

@@ -14,6 +14,7 @@ import accounts
 import checkout
 import merchants
 import twofactor
+from version import VERSION
 from network import FetchError
 from store import db, setting, secret, task_dict, log
 
@@ -62,7 +63,7 @@ def index():
 
 @app.get('/healthz')
 def health():
-    return jsonify(application='vps-watch',version=2)
+    return jsonify(application='vps-watch',version=VERSION)
 
 @app.get('/api/session')
 def current():
@@ -146,7 +147,7 @@ def dashboard():
         task['purchase_attempt']=purchases.attempt_for(task['id'])
         task['checkout_supported']=bool(getattr(merchants.REGISTRY.get(task['config']['adapter']),'SUPPORTS_CHECKOUT',False))
     heartbeat=float(setting('worker_heartbeat','0'))
-    return jsonify(tasks=tasks,logs=logs,presets=adapters.PRESETS,
+    return jsonify(tasks=tasks,logs=logs,presets=adapters.PRESETS,version=VERSION,
                    worker_online=time.time()-heartbeat<180,worker_heartbeat=heartbeat,
                    notifications_configured=bool(notifications.configured_channels()),
                    telegram_configured=bool(setting('telegram_token') and setting('telegram_chat')))
