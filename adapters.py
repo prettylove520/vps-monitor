@@ -25,9 +25,12 @@ def validate(data):
     validate_url(result['url'])
     try:
         interval=int(data.get('interval',60))
-        price=Decimal(result['max_price'])
-        if interval<15 or interval>86400 or not price.is_finite() or price<=0 or price>100000 or price.as_tuple().exponent<-2:
+        if interval<15 or interval>86400:
             raise ValueError()
+        if not (result['max_price']=='' and getattr(merchant,'PRICE_OPTIONAL',False)):
+            price=Decimal(result['max_price'])
+            if not price.is_finite() or price<=0 or price>100000 or price.as_tuple().exponent<-2:
+                raise ValueError()
     except (ValueError,TypeError,InvalidOperation):
         raise ValueError('间隔须为 15–86400 秒，价格须为正数且最多两位小数') from None
     if result['currency'] not in ('EUR','CAD','USD','GBP','CNY'):
@@ -41,13 +44,25 @@ def inspect(html,cfg):
         tag.decompose()
     if soup.title and any(x in soup.title.get_text().lower() for x in ('just a moment','attention required','access denied')):
         raise FetchError('网站要求验证，任务已暂停',blocked=True)
-    status,price,detail=merchants.for_config(cfg).inspect(soup,cfg)
-    if price<=0:
-        raise ValueError('价格无效')
-    if price>Decimal(cfg['max_price']):
-        status='price_exceeded'
-        detail='页面标价超过设定上限'
-    return {'status':status,'price':str(price),'currency':cfg['currency'],'detail':detail,'coupon':cfg['coupon'],'coupon_verified':False}
+    return finish(*merchants.for_config(cfg).inspect(soup,cfg),cfg)
+
+def finish(status,price,detail,cfg):
+    """Apply the page price cap; price may be None for merchants that cannot read it."""
+    if price is not None:
+        if price<=0:
+            raise ValueError('价格无效')
+        if cfg.get('max_price') and price>Decimal(cfg['max_price']):
+            status='price_exceeded'
+            detail='页面标价超过设定上限'
+    return {'status':status,'price':str(price) if price is not None else None,'currency':cfg['currency'],
+            'detail':detail,'coupon':cfg['coupon'],'coupon_verified':False}
+
+def check(cfg,get_html):
+    """Run one stock check for a task: the merchant's own fetch, or page download + inspect()."""
+    merchant=merchants.for_config(cfg)
+    if hasattr(merchant,'check'):
+        return finish(*merchant.check(cfg),cfg)
+    return inspect(get_html(cfg['url']),cfg)
 
 def migrate():
     """Fill fields added in later versions into stored task configs (revision unchanged)."""

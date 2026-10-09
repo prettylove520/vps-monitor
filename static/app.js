@@ -128,7 +128,7 @@ function renderTaskCards() {
     .map(t => {
       const c = t.config;
       const r = t.result;
-      return `<article class="taskcard"><div class="taskmain"><div class="merchant">${esc(c.adapter === 'bero' ? 'B' : c.adapter === 'vmiss' ? 'V' : 'W')}</div><div class="taskinfo"><div class="tasktop"><span class="tasktitle">${esc(c.name)}</span><span class="tag ${esc(t.status)}">${esc(labels[t.status] || t.status)}</span><span class="tag">${t.enabled ? '监控中' : '已暂停'}</span></div><a class="taskurl" target="_blank" rel="noopener noreferrer" href="${esc(c.url)}">${esc(new URL(c.url).hostname)}</a><p class="tasknote">${esc(r?.detail || c.note || '尚未检查；可以先运行单次检查。')}</p></div><div class="price"><strong>${esc(r?.price || '—')} <span>${esc(c.currency)}</span></strong><small>页面上限 ${esc(c.max_price)}</small></div></div><div class="taskbottom"><div class="taskmeta"><span>间隔 ${esc(c.interval)} 秒</span><span>${esc(time(t.last_check))}</span>${t.queued || t.lease > Date.now() / 1000 ? '<span>检查排队 / 执行中</span>' : ''}</div><div class="taskactions"><button data-action="check" data-id="${t.id}">检查一次</button><button data-action="${t.enabled ? 'pause' : 'start'}" data-id="${t.id}">${t.enabled ? '暂停' : '启用'}</button><button data-action="edit" data-id="${t.id}">编辑</button><button data-action="delete" class="danger" data-id="${t.id}">删除</button></div></div></article>`;
+      return `<article class="taskcard"><div class="taskmain"><div class="merchant">${esc({ bero: 'B', vmiss: 'V', whmcs: 'H' }[c.adapter] || 'W')}</div><div class="taskinfo"><div class="tasktop"><span class="tasktitle">${esc(c.name)}</span><span class="tag ${esc(t.status)}">${esc(labels[t.status] || t.status)}</span><span class="tag">${t.enabled ? '监控中' : '已暂停'}</span></div><a class="taskurl" target="_blank" rel="noopener noreferrer" href="${esc(c.url)}">${esc(new URL(c.url).hostname)}</a><p class="tasknote">${esc(r?.detail || c.note || '尚未检查；可以先运行单次检查。')}</p></div><div class="price"><strong>${esc(r?.price || '—')} <span>${esc(c.currency)}</span></strong><small>页面上限 ${esc(c.max_price || '—')}</small></div></div><div class="taskbottom"><div class="taskmeta"><span>间隔 ${esc(c.interval)} 秒</span><span>${esc(time(t.last_check))}</span>${t.queued || t.lease > Date.now() / 1000 ? '<span>检查排队 / 执行中</span>' : ''}</div><div class="taskactions"><button data-action="check" data-id="${t.id}">检查一次</button><button data-action="${t.enabled ? 'pause' : 'start'}" data-id="${t.id}">${t.enabled ? '暂停' : '启用'}</button><button data-action="edit" data-id="${t.id}">编辑</button><button data-action="delete" class="danger" data-id="${t.id}">删除</button></div></div></article>`;
     })
     .join('');
   if (!tasks.length && data.tasks.length)
@@ -226,9 +226,12 @@ function fill(config) {
     if (f.elements.namedItem(k)) f.elements.namedItem(k).value = v;
   }
   const generic = config.adapter === 'generic',
-    bero = config.adapter === 'bero';
+    bero = config.adapter === 'bero',
+    whmcs = config.adapter === 'whmcs';
   $('#genericFields').hidden = !generic;
   $('#beroFields').hidden = !bero;
+  $('#whmcsFields').hidden = !whmcs;
+  f.elements.max_price.required = !whmcs;
   f.elements.url.readOnly = config.adapter === 'vmiss';
   for (const n of ['scope', 'identity', 'price_selector', 'in_stock', 'out_stock'])
     f.elements.namedItem(n).required = generic;

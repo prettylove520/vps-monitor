@@ -7,14 +7,17 @@ from store import db
 import adapters
 import merchants
 import purchases
-from merchants import bero
+from merchants import bero, whmcs
+from network import Page, FetchError
+from unittest.mock import patch
+import worker
 
 FIXTURES=Path(__file__).parent/'fixtures'
 BERO=adapters.PRESETS['bero']
 
 class MerchantRegistryTests(unittest.TestCase):
     def test_registry_and_presets(self):
-        self.assertEqual(set(merchants.REGISTRY),{'bero','vmiss','generic'})
+        self.assertEqual(set(merchants.REGISTRY),{'bero','whmcs','vmiss','generic'})
         self.assertTrue(merchants.get('bero').SUPPORTS_CHECKOUT)
         self.assertFalse(merchants.get('vmiss').SUPPORTS_CHECKOUT)
         with self.assertRaises(ValueError):merchants.get('unknown')
@@ -81,5 +84,55 @@ class PolicyAndMigrationTests(unittest.TestCase):
         self.assertEqual(purchases.attempt_for(tid)['state'],'uncertain')
         purchases.save_policy(tid,{'payment':'balance','max_total':'44.10'})
         with self.assertRaises(ValueError):purchases.arm(tid,'44.10')
+
+class WhmcsTests(unittest.TestCase):
+    def cfg(self,**kw):
+        return adapters.validate(adapters.PRESETS['whmcs']|{'name':'Test'}|kw)
+
+    def test_link_parsing_and_validation(self):
+        cfg=self.cfg(url='https://my.example.com/cart.php?a=add&pid=123')
+        self.assertEqual((cfg['url'],cfg['pid'],cfg['max_price']),('https://my.example.com/','123',''))
+        self.assertEqual(whmcs.order_url(cfg),'https://my.example.com/cart.php?a=add&pid=123')
+        cfg=self.cfg(url='https://example.com/billing/cart.php?a=add&pid=5&billingcycle=annually')
+        self.assertEqual(whmcs.order_url(cfg),'https://example.com/billing/cart.php?a=add&pid=5')
+        cfg=self.cfg(url='https://example.com/billing/',pid='42',max_price='10.00')
+        self.assertEqual(whmcs.order_url(cfg),'https://example.com/billing/cart.php?a=add&pid=42')
+        for bad in ({'url':'https://example.com/'},{'url':'https://example.com/','pid':'x1'},
+                    {'url':'https://example.com/cart.php?a=add&pid=1','pid':'2'},{'url':'http://example.com/','pid':'1'}):
+            with self.assertRaises(Exception,msg=bad):self.cfg(**bad)
+        with self.assertRaises(ValueError):  # empty price cap only allowed where the price is unknown
+            adapters.validate(adapters.PRESETS['generic']|{'name':'x','url':'https://example.com/','scope':'#a','identity':'a',
+                              'price_selector':'.p','in_stock':'in','out_stock':'out','max_price':''})
+
+    def test_classification(self):
+        page=lambda status,html='',location='':Page('https://h/cart.php?a=add&pid=1',status,html,location)
+        oos=(FIXTURES/'whmcs-outofstock.html').read_text(encoding='utf-8')
+        self.assertEqual(whmcs.classify(page(302,location='https://h/cart.php?a=confproduct&i=0'))[0],'available')
+        self.assertEqual(whmcs.classify(page(200,oos))[0],'out_of_stock')
+        self.assertEqual(whmcs.classify(page(200,'<h1>缺货</h1><p>该商品暂时缺货</p>'))[0],'out_of_stock')
+        self.assertEqual(whmcs.classify(page(200,'<form id="frmConfigureProduct"></form>'))[0],'available')
+        for bad in (page(302,location='https://h/cart.php?a=view'),page(302,location='https://h/login'),
+                    page(200,'<p>hello</p>'),page(200,oos+'<form id="frmConfigureProduct"></form>')):
+            with self.assertRaises(ValueError):whmcs.classify(bad)
+
+    def test_check_and_worker_flow(self):
+        cfg=self.cfg(url='https://my.example.com/cart.php?a=add&pid=123')
+        with patch('merchants.whmcs.fetch',return_value=Page('u',302,location='https://my.example.com/cart.php?a=confproduct&i=0')) as f:
+            result=adapters.check(cfg,None)
+        f.assert_called_once_with('https://my.example.com/cart.php?a=add&pid=123',follow=False)
+        self.assertEqual((result['status'],result['price']),('available',None))
+        challenge=Page('u',200,'<title>Just a moment...</title>')
+        with patch('merchants.whmcs.fetch',return_value=challenge):
+            with self.assertRaises(FetchError) as ctx:adapters.check(cfg,None)
+        self.assertTrue(ctx.exception.blocked)
+        with db() as c:
+            c.execute('DELETE FROM tasks')
+            tid=c.execute('INSERT INTO tasks(config,created,enabled) VALUES (?,?,1)',(json.dumps(cfg),time.time())).lastrowid
+            row=dict(c.execute('SELECT * FROM tasks WHERE id=?',(tid,)).fetchone())
+        with patch('merchants.whmcs.fetch',return_value=Page('u',302,location='https://my.example.com/cart.php?a=confproduct&i=0')),\
+             patch('worker.get_html') as get_html,patch('worker.notifications.send',return_value={'sent':['bark'],'failed':{},'complete':True}) as send:
+            worker.perform(row,cfg)
+        get_html.assert_not_called();send.assert_called_once()
+        with db() as c:self.assertEqual(c.execute('SELECT status FROM tasks WHERE id=?',(tid,)).fetchone()[0],'available')
 
 if __name__=='__main__':unittest.main()

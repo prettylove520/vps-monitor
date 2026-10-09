@@ -34,7 +34,10 @@ def perform(row,cfg):
     delay=cfg['interval']+random.uniform(0,1.5)
     result={}
     try:
-        result=adapters.inspect(get_html(cfg['url']),cfg)
+        if hasattr(merchants.REGISTRY.get(cfg['adapter']),'check'):
+            result=adapters.check(cfg,get_html)
+        else:
+            result=adapters.inspect(get_html(cfg['url']),cfg)
         status=result['status']
         detail=result['detail']
         failures=0
@@ -65,9 +68,11 @@ def perform(row,cfg):
             try:
                 with db() as c:
                     delivery=c.execute('SELECT channels FROM task_notifications WHERE task_id=? AND revision=?',(row['id'],row['revision'])).fetchone()
-                report=notifications.send(f"补货提示：{cfg['name']}\n页面价格：{result['price']} {result['currency']}\n{detail}\n"
-                    f"优惠码：{cfg['coupon'] or '未设置'}\n{cfg['url']}\n"+('已启用自动下单，结果另行通知。' if armed else '未下单或付款。'),
-                    delivered=json.loads(delivery['channels']) if delivery else [],url=cfg['url'])
+                link=getattr(merchants.REGISTRY.get(cfg['adapter']),'order_url',lambda c:c['url'])(cfg)
+                price=f"{result['price']} {result['currency']}" if result.get('price') else '页面未提供'
+                report=notifications.send(f"补货提示：{cfg['name']}\n页面价格：{price}\n{detail}\n"
+                    f"优惠码：{cfg['coupon'] or '未设置'}\n{link}\n"+('已启用自动下单，结果另行通知。' if armed else '未下单或付款。'),
+                    delivered=json.loads(delivery['channels']) if delivery else [],url=link)
                 with db() as c:
                     c.execute('INSERT INTO task_notifications(task_id,revision,channels) SELECT id,revision,? FROM tasks WHERE id=? AND revision=? ON CONFLICT(task_id) DO UPDATE SET revision=excluded.revision,channels=excluded.channels',
                               (json.dumps(report['sent']),row['id'],row['revision']))

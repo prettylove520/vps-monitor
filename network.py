@@ -53,7 +53,12 @@ class PinnedHTTPS(http.client.HTTPSConnection):
             sock.close()
             raise
 
-def get_html(url):
+class Page:
+    """Result of a single fetch: status 200 with html, or a same-site redirect (follow=False)."""
+    def __init__(self, url, status, html='', location=''):
+        self.url, self.status, self.html, self.location = url, status, html, location
+
+def fetch(url, follow=True):
     for _ in range(4):
         p = validate_url(url)
         host = p.hostname.encode('idna').decode()
@@ -70,6 +75,8 @@ def get_html(url):
                 new = urljoin(url, location)
                 if validate_url(new).hostname != p.hostname:
                     raise FetchError('网站跳转到其他域名，请人工检查', blocked=True)
+                if not follow:
+                    return Page(url, response.status, location=new)
                 url = new
                 continue
             if response.status in (401, 403):
@@ -86,8 +93,7 @@ def get_html(url):
             body = response.read(3_000_001)
             if len(body) > 3_000_000:
                 raise FetchError('页面超过 3 MB，停止解析')
-            html = body.decode('utf-8-sig')
-            return html
+            return Page(url, 200, html=body.decode('utf-8-sig'))
         except FetchError:
             raise
         except (OSError, UnicodeError, http.client.HTTPException):
@@ -95,3 +101,6 @@ def get_html(url):
         finally:
             conn.close()
     raise FetchError('页面重定向次数过多')
+
+def get_html(url):
+    return fetch(url).html

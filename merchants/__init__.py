@@ -4,6 +4,9 @@ Each adapter module provides:
   NAME, LABEL, PRESETS (task templates), SUPPORTS_CHECKOUT
   validate(result, data) -> result      merchant-specific task fields
   inspect(soup, cfg) -> (status, Decimal price, detail)   public stock check
+Optional:
+  check(cfg) -> (status, price or None, detail)   fetch the page itself instead of inspect()
+  PRICE_OPTIONAL = True                            the page price cap may be left empty
 Adapters with SUPPORTS_CHECKOUT also provide:
   MERCHANT, HOST, ORDERS_URL, CURRENCY, ERRORS, LEGACY_DEFAULTS
   account_ready(), session() (context manager yielding a logged-in client)
@@ -12,9 +15,9 @@ Adapters with SUPPORTS_CHECKOUT also provide:
 
 To add a merchant: create merchants/<name>.py and register it below.
 """
-from merchants import bero, generic, vmiss
+from merchants import bero, generic, vmiss, whmcs
 
-REGISTRY={m.NAME:m for m in (bero,vmiss,generic)}
+REGISTRY={m.NAME:m for m in (bero,whmcs,vmiss,generic)}
 PRESETS={key:preset for m in REGISTRY.values() for key,preset in m.PRESETS.items()}
 
 def get(name):
