@@ -9,6 +9,7 @@
 - **多商家监控**：BERO 套餐页、**任意 WHMCS 商家**（粘贴下单链接即可）、VMISS 专用模板、通用 HTML 规则（CSS 选择器）。
 - **通知**：Bark 重要警告（持续响铃）、微信（PushPlus / Server酱 / 企业微信群机器人）、Telegram，可同时启用，按渠道去重和重试。
 - **BERO 自动付款**：补货时立即用余额下单，只下一次；下单前核对套餐、规格、周期、优惠码、价格上限和余额，任何一项不对就停止。
+- **补货记录**：记录每次补货的时间和持续时长，通知里附「近 30 天第几次补货」。
 - **结账预检**：不下单地走一遍结账流程，启用自动付款后每 6 小时自动检查一次，网站改版能提前发现。
 - **安全**：管理员密码 + 可选两步验证（TOTP）；网页只监听本机，配合 SSH 转发或 HTTPS 反向代理访问。
 - **部署**：一键脚本（Debian / systemd）或 Docker Compose。
@@ -88,8 +89,14 @@ cd vps-watch && git pull && docker compose build && docker compose up -d   # Doc
 **忘记管理员密码？**
 同上，把 `disable-2fa` 换成 `password`。任务和设置不受影响。
 
+**换 VPS 或想把监控清单分享给别人？**
+任务页右上角「导出」得到 JSON 文件，在新的工作台点「导入」即可。文件只有任务设置，不含密码、推送密钥和购买设置；导入后默认暂停。
+
+**会不会偷偷联网上报？**
+不会。唯一的额外请求是 worker 每天查一次本项目在 GitHub 上的最新版本号，用来显示「有新版本」。不想要的话，在 `/etc/vps-watch.env`（Docker 在 `docker-compose.yml` 的 `environment`）里加 `UPDATE_CHECK=0` 后重启。
+
 **怎么备份？**
-停止服务后备份 `/var/lib/vps-watch` 和 `/etc/vps-watch.env`（Docker 备份 `vps-watch-data` 卷）。里面有数据库和加密密钥，请私密保管。
+完整备份（含账号和密钥）：停止服务后备份 `/var/lib/vps-watch` 和 `/etc/vps-watch.env`（Docker 备份 `vps-watch-data` 卷）。里面有数据库和加密密钥，请私密保管。
 
 ## 文档
 

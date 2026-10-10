@@ -9,6 +9,8 @@ import accounts
 import merchants
 import checkout
 import purchases
+import stock
+import updates
 from network import get_html, FetchError
 from store import db, log, set_setting, DATA
 
@@ -49,6 +51,7 @@ def perform(row,cfg):
             current=c.execute('SELECT revision FROM tasks WHERE id=?',(row['id'],)).fetchone()
         if not current or current[0]!=row['revision']:
             return
+        stock.record(row['id'],status,result.get('price'))
         if status in ('out_of_stock','price_exceeded'):
             with db() as c:
                 c.execute('DELETE FROM task_notifications WHERE task_id=? AND revision=?',(row['id'],row['revision']))
@@ -71,8 +74,12 @@ def perform(row,cfg):
                     delivery=c.execute('SELECT channels FROM task_notifications WHERE task_id=? AND revision=?',(row['id'],row['revision'])).fetchone()
                 link=getattr(merchants.REGISTRY.get(cfg['adapter']),'order_url',lambda c:c['url'])(cfg)
                 price=f"{result['price']} {result['currency']}" if result.get('price') else '页面未提供'
-                report=notifications.send(f"补货提示：{cfg['name']}\n页面价格：{price}\n{detail}\n"
-                    f"优惠码：{cfg['coupon'] or '未设置'}\n{link}\n"+('已启用自动下单，结果另行通知。' if armed else '未下单或付款。'),
+                history=stock.alert_line(row['id'])
+                message=f"补货提示：{cfg['name']}\n页面价格：{price}\n{detail}\n"
+                if history:
+                    message+=history+'\n'
+                message+=f"优惠码：{cfg['coupon'] or '未设置'}\n{link}\n"+('已启用自动下单，结果另行通知。' if armed else '未下单或付款。')
+                report=notifications.send(message,
                     delivered=json.loads(delivery['channels']) if delivery else [],url=link)
                 with db() as c:
                     c.execute('INSERT INTO task_notifications(task_id,revision,channels) SELECT id,revision,? FROM tasks WHERE id=? AND revision=? ON CONFLICT(task_id) DO UPDATE SET revision=excluded.revision,channels=excluded.channels',
@@ -217,6 +224,10 @@ def main():
             health_check()
         except Exception:
             log(None,'warning','结账健康检查排队失败')
+        try:
+            updates.maybe_check()
+        except Exception:
+            pass
         if checkout.run_next(notify=checkout_notice):
             continue
         job=claim()

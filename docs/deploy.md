@@ -54,4 +54,14 @@ runuser -u vpswatch -- env WATCH_DATA=/var/lib/vps-watch /opt/vps-watch/.venv/bi
 
 升级：备份后上传新版本，运行安装脚本；数据库和密钥保留，既有任务保留。安装脚本不会主动停掉旧的独立 BERO/VMISS 服务。
 
+环境变量（写在 `/etc/vps-watch.env`，Docker 写在 `docker-compose.yml` 的 `environment`）：
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `COOKIE_SECURE` | `1` | 通过 HTTPS 访问时保持 `1`；只用 SSH 转发访问时设为 `0` |
+| `UPDATE_CHECK` | `1` | 设为 `0` 关闭每天一次的新版本检查 |
+| `UPDATE_REPO` | `prettylove520/vps-monitor` | 用自己的 fork 时改成 `你的用户名/仓库名` |
+
+只想迁移任务、不迁移账号：在任务页点「导出」，新工作台点「导入」。
+
 备份：先停止两个新服务，完整备份 `/var/lib/vps-watch` 和 `/etc/vps-watch.env`，再启动服务。目录包含数据库和密钥，应私密保管；恢复时保持目录属主 vpswatch、权限700。Telegram Token在数据库中加密，具有该数据目录权限的服务器管理员仍可解密。

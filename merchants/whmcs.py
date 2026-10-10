@@ -25,6 +25,9 @@ PRESETS={
 OUT_OF_STOCK=('out of stock','currently out of stock','缺货','售罄','无库存','已售完','庫存不足','缺貨','ausverkauft',
               'nicht vorrätig','nicht auf lager','rupture de stock','agotado','esaurito','нет в наличии')
 CONFIGURE_MARKERS=('frmConfigureProduct','confproduct','id="productConfigurationForm"')
+# Products that need a domain/hostname first show WHMCS's domain step instead of the configure page;
+# WHMCS only reaches this step for products it is willing to sell, so it also means "in stock".
+DOMAIN_MARKERS=('frmProductDomain','id="productDomain"','a=domainoptions')
 
 def parse_link(url):
     """Accept the shop's order link (…/cart.php?a=add&pid=123) or the WHMCS base URL."""
@@ -68,11 +71,13 @@ def classify(page):
         tag.decompose()
     text=soup.get_text(' ',strip=True).casefold()
     sold=any(word in text for word in OUT_OF_STOCK)
-    configure=any(marker in page.html for marker in CONFIGURE_MARKERS)
+    configure=any(marker in page.html for marker in CONFIGURE_MARKERS+DOMAIN_MARKERS)
     if sold and configure:
         raise ValueError('WHMCS 页面同时出现缺货提示和配置表单，无法判断')
     if sold:
         return 'out_of_stock','WHMCS 显示缺货'
+    if any(marker in page.html for marker in DOMAIN_MARKERS):
+        return 'available','页面进入域名 / 主机名步骤（WHMCS 判定有库存）'
     if configure:
         return 'available','页面显示商品配置表单（WHMCS 判定有库存）'
     raise ValueError('未识别的 WHMCS 页面：既没有缺货提示，也没有进入配置页')

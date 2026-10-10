@@ -112,6 +112,12 @@ function render() {
   $('#errors').textContent = tasks.filter(t => ['blocked', 'error'].includes(t.status)).length;
   $('#workerStatus').textContent = data.worker_online ? '后台检查运行中' : '后台检查未运行';
   $('#appVersion').textContent = data.version ? 'v' + data.version : '';
+  const update = data.update;
+  $('#updateNotice').hidden = !update;
+  if (update) {
+    $('#updateNotice').href = update.url;
+    $('#updateNotice').textContent = '有新版本 v' + update.version + ' · 查看更新说明';
+  }
   $('#workerWarning').hidden = data.worker_online;
   $('#telegramWarning').hidden = data.notifications_configured;
   renderTasks();
@@ -124,6 +130,88 @@ function render() {
         .join('')
     : '<div class="empty"><p>还没有检查记录。添加任务后，点击「检查一次」。</p></div>';
 }
+function ago(t) {
+  const s = Math.max(0, Date.now() / 1000 - t);
+  if (s < 60) return '刚刚';
+  if (s < 3600) return Math.floor(s / 60) + ' 分钟前';
+  if (s < 86400) return Math.floor(s / 3600) + ' 小时前';
+  return Math.floor(s / 86400) + ' 天前';
+}
+function span(seconds) {
+  const s = Math.round(seconds || 0);
+  if (s < 60) return s + ' 秒';
+  if (s < 3600) return Math.floor(s / 60) + ' 分钟';
+  if (s < 86400)
+    return Math.floor(s / 3600) + ' 小时' + (s % 3600 >= 60 ? ' ' + Math.floor((s % 3600) / 60) + ' 分' : '');
+  return Math.floor(s / 86400) + ' 天';
+}
+function stockLine(t) {
+  const s = t.stock;
+  if (!s?.last_restock) return '';
+  return `<span class="stockline">上次补货 ${esc(ago(s.last_restock))} · 30 天 ${esc(s.restocks_30d)} 次</span>`;
+}
+async function openStock(task) {
+  if (!task) return;
+  $('#stockTitle').textContent = '补货记录 · ' + task.config.name;
+  $('#stockSummary').textContent = '正在加载…';
+  $('#stockList').innerHTML = '';
+  $('#stockDialog').showModal();
+  try {
+    const h = await api('/tasks/' + task.id + '/stock-history');
+    const s = h.summary;
+    $('#stockSummary').textContent = s.tracked_since
+      ? `从 ${time(s.tracked_since)} 开始记录，共 ${s.restocks_total} 次补货，近 30 天 ${s.restocks_30d} 次` +
+        (s.median_seconds ? `；有货时长中位数 ${span(s.median_seconds)}` : '') +
+        (s.in_stock_now ? '；当前有货' : '')
+      : '还没有记录。任务启用后，每次检查到「售罄」或「有货」都会记录状态变化。';
+    $('#stockList').innerHTML = h.restocks.length
+      ? h.restocks
+          .map(
+            r =>
+              `<li><time>${esc(time(r.start))}</time><span class="tag ${r.end ? '' : 'available'}">${
+                r.end ? '已售罄' : '有货中'
+              }</span><strong>持续 ${esc(span(r.seconds))}</strong><span>${esc(r.price ? '页面价格 ' + r.price : '')}</span></li>`,
+          )
+          .join('')
+      : '<li class="historyempty">还没有补货记录（第一次检查到的状态不算补货）</li>';
+  } catch (e) {
+    $('#stockSummary').textContent = e.message;
+  }
+}
+$('#closeStock').onclick = () => $('#stockDialog').close();
+$('#exportTasks').onclick = async () => {
+  try {
+    const body = await api('/tasks/export');
+    const blob = new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'vps-watch-tasks-' + new Date().toISOString().slice(0, 10) + '.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast(`已导出 ${body.tasks.length} 个任务；文件不含密码、推送密钥和购买设置`);
+  } catch (e) {
+    toast(e.message);
+  }
+};
+$('#importTasks').onclick = () => $('#importFile').click();
+$('#importFile').onchange = async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    let body;
+    try {
+      body = JSON.parse(await file.text());
+    } catch {
+      throw new Error('文件不是有效的 JSON');
+    }
+    const r = await api('/tasks/import', 'POST', body);
+    toast(`已导入 ${r.imported} 个任务（默认暂停）` + (r.skipped ? `，跳过 ${r.skipped} 个重复任务` : ''));
+    await refresh();
+  } catch (err) {
+    toast(err.message);
+  }
+};
 function renderTaskCards() {
   if (!data) return;
   const q = $('#search').value.toLowerCase();
@@ -137,7 +225,7 @@ function renderTaskCards() {
     .map(t => {
       const c = t.config;
       const r = t.result;
-      return `<article class="taskcard"><div class="taskmain"><div class="merchant">${esc({ bero: 'B', vmiss: 'V', whmcs: 'H' }[c.adapter] || 'W')}</div><div class="taskinfo"><div class="tasktop"><span class="tasktitle">${esc(c.name)}</span><span class="tag ${esc(t.status)}">${esc(labels[t.status] || t.status)}</span><span class="tag">${t.enabled ? '监控中' : '已暂停'}</span></div><a class="taskurl" target="_blank" rel="noopener noreferrer" href="${esc(c.url)}">${esc(new URL(c.url).hostname)}</a><p class="tasknote">${esc(r?.detail || c.note || '尚未检查；可以先运行单次检查。')}</p></div><div class="price"><strong>${esc(r?.price || '—')} <span>${esc(c.currency)}</span></strong><small>页面上限 ${esc(c.max_price || '—')}</small></div></div><div class="taskbottom"><div class="taskmeta"><span>间隔 ${esc(c.interval)} 秒</span><span>${esc(time(t.last_check))}</span>${t.queued || t.lease > Date.now() / 1000 ? '<span>检查排队 / 执行中</span>' : ''}</div><div class="taskactions"><button data-action="check" data-id="${t.id}">检查一次</button><button data-action="${t.enabled ? 'pause' : 'start'}" data-id="${t.id}">${t.enabled ? '暂停' : '启用'}</button><button data-action="edit" data-id="${t.id}">编辑</button><button data-action="delete" class="danger" data-id="${t.id}">删除</button></div></div></article>`;
+      return `<article class="taskcard"><div class="taskmain"><div class="merchant">${esc({ bero: 'B', vmiss: 'V', whmcs: 'H' }[c.adapter] || 'W')}</div><div class="taskinfo"><div class="tasktop"><span class="tasktitle">${esc(c.name)}</span><span class="tag ${esc(t.status)}">${esc(labels[t.status] || t.status)}</span><span class="tag">${t.enabled ? '监控中' : '已暂停'}</span></div><a class="taskurl" target="_blank" rel="noopener noreferrer" href="${esc(c.url)}">${esc(new URL(c.url).hostname)}</a><p class="tasknote">${esc(r?.detail || c.note || '尚未检查；可以先运行单次检查。')}</p></div><div class="price"><strong>${esc(r?.price || '—')} <span>${esc(c.currency)}</span></strong><small>页面上限 ${esc(c.max_price || '—')}</small></div></div><div class="taskbottom"><div class="taskmeta"><span>间隔 ${esc(c.interval)} 秒</span><span>${esc(time(t.last_check))}</span>${stockLine(t)}${t.queued || t.lease > Date.now() / 1000 ? '<span>检查排队 / 执行中</span>' : ''}</div><div class="taskactions"><button data-action="check" data-id="${t.id}">检查一次</button><button data-action="${t.enabled ? 'pause' : 'start'}" data-id="${t.id}">${t.enabled ? '暂停' : '启用'}</button><button data-action="stock" data-id="${t.id}">补货记录</button><button data-action="edit" data-id="${t.id}">编辑</button><button data-action="delete" class="danger" data-id="${t.id}">删除</button></div></div></article>`;
     })
     .join('');
   if (!tasks.length && data.tasks.length)
@@ -150,6 +238,10 @@ $('#taskList').onclick = async e => {
     a = b.dataset.action;
   if (a === 'edit') {
     openTask(data.tasks.find(t => t.id === id));
+    return;
+  }
+  if (a === 'stock') {
+    openStock(data.tasks.find(t => t.id === id));
     return;
   }
   if (a === 'delete' && !confirm('删除这个监控任务？')) return;
@@ -187,9 +279,13 @@ async function switchView(view) {
   const generation = ++settingsGeneration;
   document.querySelectorAll('.view').forEach(x => (x.hidden = x.id !== view + 'View'));
   document.querySelectorAll('[data-view]').forEach(x => x.classList.toggle('selected', x.dataset.view === view));
-  $('#pageName').textContent = { tasks: '监控任务', logs: '检查日志', accounts: '商家账户', settings: '通知设置', security: '安全' }[
-    view
-  ];
+  $('#pageName').textContent = {
+    tasks: '监控任务',
+    logs: '检查日志',
+    accounts: '商家账户',
+    settings: '通知设置',
+    security: '安全',
+  }[view];
   if (view === 'accounts') {
     await loadAccount(generation);
     return;
@@ -568,9 +664,10 @@ function showHistory(runs) {
   $('#preflightHistory').innerHTML = runs.length
     ? runs
         .map(
-          r => `<li class="${r.order_submitted ? 'submitted' : ''}"><time>${esc(time(r.finished))}</time><span class="tag">${
-            r.mode === 'purchase' ? '下单' : '预检'
-          }</span><strong>${esc(statusText[r.status] || r.status || r.state)}</strong><span>${esc(r.message || '')}</span></li>`
+          r =>
+            `<li class="${r.order_submitted ? 'submitted' : ''}"><time>${esc(time(r.finished))}</time><span class="tag">${
+              r.mode === 'purchase' ? '下单' : '预检'
+            }</span><strong>${esc(statusText[r.status] || r.status || r.state)}</strong><span>${esc(r.message || '')}</span></li>`,
         )
         .join('')
     : '<li class="historyempty">还没有记录</li>';
@@ -727,7 +824,7 @@ function renderWechat(channels) {
         <div class="actions"><button type="button" class="primary" data-wechat="save">保存</button><button type="button" class="secondary" data-wechat="test" ${
           c.saved ? '' : 'disabled'
         }>发送测试</button>${c.saved ? '<button type="button" class="secondary" data-wechat="delete">删除</button>' : ''}</div>
-      </div>`
+      </div>`,
     )
     .join('');
 }
@@ -745,7 +842,7 @@ $('#wechatChannels').addEventListener('click', async e => {
           channel,
           token: row.querySelector('[data-field="token"]').value,
           enabled: row.querySelector('[data-field="enabled"]').checked,
-        })
+        }),
       );
       toast('微信推送设置已保存');
       await refresh();
@@ -805,7 +902,10 @@ $('#totpDisableForm').onsubmit = async e => {
   e.preventDefault();
   $('#securityError').textContent = '';
   try {
-    await api('/security/totp/disable', 'POST', { password: $('#totpPassword').value, code: $('#totpDisableCode').value });
+    await api('/security/totp/disable', 'POST', {
+      password: $('#totpPassword').value,
+      code: $('#totpDisableCode').value,
+    });
     $('#totpPassword').value = '';
     $('#totpDisableCode').value = '';
     toast('两步验证已关闭');

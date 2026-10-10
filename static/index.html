@@ -23,8 +23,12 @@
             required
             minlength="12" /></label
         ><label id="codeField" hidden
-          >两步验证码<input id="loginCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位数字"
-        /></label
+          >两步验证码<input
+            id="loginCode"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="6"
+            placeholder="6 位数字" /></label
         ><button class="primary" type="submit">登录工作台</button>
         <p id="loginError" role="alert"></p>
       </form>
@@ -43,8 +47,9 @@
           ><button class="navitem" data-view="security">⛨ <span>安全</span></button>
         </nav>
         <div class="sidefoot">
-          <span class="mini">运行于你的 VPS <span id="appVersion"></span></span><strong id="workerStatus">正在连接后台…</strong
-          ><button id="logout" class="subtle">退出登录</button>
+          <a id="updateNotice" class="updatenotice" target="_blank" rel="noopener noreferrer" hidden></a>
+          <span class="mini">运行于你的 VPS <span id="appVersion"></span></span
+          ><strong id="workerStatus">正在连接后台…</strong><button id="logout" class="subtle">退出登录</button>
         </div>
       </aside>
       <main>
@@ -59,7 +64,17 @@
               <h1>监控任务</h1>
               <p class="muted">管理目标套餐、检查频率和补货提醒。</p>
             </div>
-            <button id="add" class="primary">＋ 添加任务</button>
+            <div class="titleactions">
+              <button id="exportTasks" class="secondary" title="下载任务设置（不含密码、推送密钥和购买设置）">
+                导出</button
+              ><button id="importTasks" class="secondary" title="从导出的文件恢复任务，导入后默认暂停">导入</button
+              ><input id="importFile" type="file" accept=".json,application/json" hidden /><button
+                id="add"
+                class="primary"
+              >
+                ＋ 添加任务
+              </button>
+            </div>
           </div>
           <div id="workerWarning" class="banner" hidden>
             后台检查进程未运行。任务可以保存，但暂时不会检查库存，请按部署说明启动 worker 服务。
@@ -168,19 +183,36 @@
             <p id="totpState" class="banner">正在加载…</p>
             <button id="totpStart" type="button" class="primary" hidden>开始绑定</button>
             <div id="totpSetup" hidden>
-              <p class="help">用验证器 App 扫描二维码；无法扫码时手动输入下面的密钥。然后填入 App 显示的 6 位验证码确认。</p>
+              <p class="help">
+                用验证器 App 扫描二维码；无法扫码时手动输入下面的密钥。然后填入 App 显示的 6 位验证码确认。
+              </p>
               <img id="totpQr" class="totpqr" alt="两步验证二维码" />
               <p class="totpsecret"><code id="totpSecret"></code></p>
-              <label>6 位验证码<input id="totpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" /></label>
+              <label
+                >6 位验证码<input id="totpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6"
+              /></label>
               <button id="totpConfirm" type="button" class="primary">确认启用</button>
             </div>
             <form id="totpDisableForm" hidden>
-              <label>管理员密码<input id="totpPassword" type="password" autocomplete="current-password" required /></label>
-              <label>当前验证码<input id="totpDisableCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required /></label>
+              <label
+                >管理员密码<input id="totpPassword" type="password" autocomplete="current-password" required
+              /></label>
+              <label
+                >当前验证码<input
+                  id="totpDisableCode"
+                  inputmode="numeric"
+                  autocomplete="one-time-code"
+                  maxlength="6"
+                  required
+              /></label>
               <button type="submit" class="secondary">关闭两步验证</button>
             </form>
             <p id="securityError" class="error" role="alert"></p>
-            <p class="help">手机丢失时，在服务器上执行 <code>manage.py disable-2fa</code> 关闭两步验证（Docker：<code>docker compose run --rm web python manage.py disable-2fa</code>）。</p>
+            <p class="help">
+              手机丢失时，在服务器上执行 <code>manage.py disable-2fa</code> 关闭两步验证（Docker：<code
+                >docker compose run --rm web python manage.py disable-2fa</code
+              >）。
+            </p>
           </div>
         </section>
         <section id="settingsView" class="view" hidden>
@@ -188,7 +220,9 @@
             <div>
               <p class="eyebrow">NOTIFICATIONS</p>
               <h1>通知设置</h1>
-              <p class="muted">Bark、微信（PushPlus / Server酱 / 企业微信）与 Telegram 可单独使用，也可同时接收提醒。</p>
+              <p class="muted">
+                Bark、微信（PushPlus / Server酱 / 企业微信）与 Telegram 可单独使用，也可同时接收提醒。
+              </p>
             </div>
           </div>
           <form id="barkForm" class="settingscard">
@@ -266,7 +300,8 @@
             </div>
             <div id="wechatChannels"></div>
             <p class="help">
-              PushPlus：在 pushplus.plus 微信扫码登录后复制 token。Server酱：在 sct.ftqq.com 复制 SendKey。企业微信：群聊 → 添加群机器人，复制 Webhook 地址。密钥加密保存在 VPS 上，保存后不会返回网页。
+              PushPlus：在 pushplus.plus 微信扫码登录后复制 token。Server酱：在 sct.ftqq.com 复制
+              SendKey。企业微信：群聊 → 添加群机器人，复制 Webhook 地址。密钥加密保存在 VPS 上，保存后不会返回网页。
             </p>
           </section>
           <form id="settingsForm" class="settingscard">
@@ -352,9 +387,13 @@
           </div>
           <div id="whmcsFields" hidden>
             <div class="ruleintro">
-              大多数 VPS 小商家使用 WHMCS。在商家网站点「立即订购 / Order Now」，把跳转前的链接（形如 …/cart.php?a=add&amp;pid=123）粘贴到上面的「商品页面」，或填写 WHMCS 首页地址再在下面填商品编号。程序按 WHMCS 自带的缺货判断检查，不需要登录；价格上限可以留空。
+              大多数 VPS 小商家使用 WHMCS。在商家网站点「立即订购 / Order Now」，把跳转前的链接（形如
+              …/cart.php?a=add&amp;pid=123）粘贴到上面的「商品页面」，或填写 WHMCS 首页地址再在下面填商品编号。程序按
+              WHMCS 自带的缺货判断检查，不需要登录；价格上限可以留空。
             </div>
-            <label>商品编号 pid<input name="pid" inputmode="numeric" maxlength="9" placeholder="粘贴了下单链接可留空" /></label>
+            <label
+              >商品编号 pid<input name="pid" inputmode="numeric" maxlength="9" placeholder="粘贴了下单链接可留空"
+            /></label>
           </div>
           <div id="genericFields" hidden>
             <div class="ruleintro">适用于无需登录、HTML 中直接含价格和库存的商品页。动态页面需要单独适配。</div>
@@ -429,6 +468,22 @@
           ><button id="clearAttempt" type="button" class="secondary">清除购买记录</button>
         </div>
         <p id="armError" class="error" role="alert"></p>
+      </div>
+    </dialog>
+    <dialog id="stockDialog">
+      <div class="dialoghead">
+        <div>
+          <p class="eyebrow">RESTOCK HISTORY</p>
+          <h2 id="stockTitle">补货记录</h2>
+        </div>
+        <button type="button" id="closeStock" class="iconbutton" aria-label="关闭">×</button>
+      </div>
+      <div class="dialogbody">
+        <p id="stockSummary" class="ruleintro"></p>
+        <p class="help">
+          记录监控检查到的「售罄 → 有货 → 售罄」变化，时间精度取决于检查间隔。检查异常或访问受限期间不计入。
+        </p>
+        <ul id="stockList" class="historylist"></ul>
       </div>
     </dialog>
     <div id="toast" class="toast" role="status" hidden></div>

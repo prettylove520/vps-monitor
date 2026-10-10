@@ -14,12 +14,14 @@ import accounts
 import checkout
 import merchants
 import twofactor
+import stock
+import updates
 from version import VERSION
 from network import FetchError
 from store import db, setting, secret, task_dict, log
 
 app=Flask(__name__,static_folder='static')
-app.config.update(SECRET_KEY=secret('session.key'),MAX_CONTENT_LENGTH=32768,
+app.config.update(SECRET_KEY=secret('session.key'),MAX_CONTENT_LENGTH=262144,
     SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Strict',
     SESSION_COOKIE_SECURE=os.environ.get('COOKIE_SECURE','1')=='1',PERMANENT_SESSION_LIFETIME=timedelta(hours=8))
 
@@ -146,8 +148,9 @@ def dashboard():
         task['checkout_preflight']=checkout.latest(task['id'])
         task['purchase_attempt']=purchases.attempt_for(task['id'])
         task['checkout_supported']=bool(getattr(merchants.REGISTRY.get(task['config']['adapter']),'SUPPORTS_CHECKOUT',False))
+        task['stock']=stock.summary(task['id'])
     heartbeat=float(setting('worker_heartbeat','0'))
-    return jsonify(tasks=tasks,logs=logs,presets=adapters.PRESETS,version=VERSION,
+    return jsonify(tasks=tasks,logs=logs,presets=adapters.PRESETS,version=VERSION,update=updates.status(),
                    worker_online=time.time()-heartbeat<180,worker_heartbeat=heartbeat,
                    notifications_configured=bool(notifications.configured_channels()),
                    telegram_configured=bool(setting('telegram_token') and setting('telegram_chat')))
@@ -162,6 +165,46 @@ def create():
         id=c.execute('INSERT INTO tasks(config,created) VALUES (?,?)',(json.dumps(cfg,ensure_ascii=False),time.time())).lastrowid
     log(id,'info','任务已创建，默认暂停；请先检查规则')
     return jsonify(id=id),201
+
+EXPORT_FORMAT='vps-watch-tasks'
+
+@app.get('/api/tasks/export')
+@auth
+def export_tasks():
+    """Task settings only: no account credentials, notification keys, purchase settings or history."""
+    with db() as c:
+        configs=[json.loads(r[0]) for r in c.execute('SELECT config FROM tasks ORDER BY id')]
+    return jsonify(format=EXPORT_FORMAT,version=VERSION,exported=time.time(),tasks=configs)
+
+@app.post('/api/tasks/import')
+@auth
+def import_tasks():
+    data=request.get_json() or {}
+    if not isinstance(data,dict) or data.get('format')!=EXPORT_FORMAT or not isinstance(data.get('tasks'),list):
+        raise ValueError('不是 VPS Watch 导出的任务文件')
+    if not data['tasks']:
+        raise ValueError('文件里没有任务')
+    configs=[]
+    for i,item in enumerate(data['tasks'],1):
+        try:
+            configs.append(adapters.validate(item))
+        except (ValueError,FetchError,KeyError,TypeError,AttributeError) as error:
+            raise ValueError('第 %d 个任务无效：%s'%(i,error)) from None
+    with db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        existing={(json.loads(r[0])['adapter'],json.dumps(json.loads(r[0]),sort_keys=True)) for r in c.execute('SELECT config FROM tasks')}
+        fresh=[cfg for cfg in configs if (cfg['adapter'],json.dumps(cfg,sort_keys=True)) not in existing]
+        if len(existing)+len(fresh)>100:
+            raise ValueError('导入后超过 100 个任务')
+        for cfg in fresh:
+            c.execute('INSERT INTO tasks(config,created) VALUES (?,?)',(json.dumps(cfg,ensure_ascii=False),time.time()))
+    log(None,'info','已导入 %d 个任务（默认暂停），跳过 %d 个重复任务'%(len(fresh),len(configs)-len(fresh)))
+    return jsonify(imported=len(fresh),skipped=len(configs)-len(fresh))
+
+@app.get('/api/tasks/<int:id>/stock-history')
+@auth
+def stock_history(id):
+    return jsonify(summary=stock.summary(id),restocks=stock.restocks(id)[:50])
 
 @app.put('/api/tasks/<int:id>')
 @auth

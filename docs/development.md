@@ -35,3 +35,22 @@ export COOKIE_SECURE=0
 当前共 97 项后端测试。新增的自动付款测试按 2026-10-09 实际核实的页面结构（`tests/fixtures/bero-check109.html`、`bero-money.html`）回放完整下单流程，覆盖：调用顺序与签名快照不变、缺货不占用购买记录、余额不足、确认页价格或规格变化、下单表单或条款控件变化、条款未生效时释放记录、下单响应丢失时标记不确定且绝不重发、未启用时禁止勾选条款和下单、补货时先下单后提醒、购买任务跳过访问间隔、启用需要输入金额确认和已验证登录、清除记录需要输入「已核实」。商家交互全部使用模拟页面，测试中没有向 BERO 发送真实请求。真实补货时的下单响应（跳转或感谢页）还没有在真实环境中出现过，程序以余额变化作为成功依据。当前环境未执行 Debian 13 上的安装脚本和 systemd 服务联调。
 
 端口说明：工作台使用 18080。安装脚本通过 /healthz 确认程序身份，域名脚本先验证本机 HTTPS 再报告成功。
+
+## 模块一览
+
+| 文件 | 作用 |
+|---|---|
+| `app.py` | 网页和 API |
+| `worker.py` | 后台检查循环、补货通知、自动下单排队 |
+| `adapters.py` / `merchants/` | 任务校验和各商家的页面识别、结账流程 |
+| `checkout.py` / `purchases.py` | 结账预检与自动下单队列、一次性购买保护 |
+| `stock.py` | 补货记录（库存状态变化） |
+| `notifications.py` | Bark、微信、Telegram |
+| `updates.py` | 每天检查 GitHub 最新 Release |
+| `accounts.py` / `twofactor.py` | BERO 登录会话、管理员两步验证 |
+
+## 发布新版本
+
+1. 改 `version.py` 和 `CHANGELOG.md`，提交并确认 GitHub Actions 是绿色。
+2. 打标签并推送：`git tag v0.4.0 && git push origin v0.4.0`。
+3. 在 GitHub 上用这个标签建一个 Release（标题写版本号，正文贴 CHANGELOG 对应段落）。各用户的工作台第二天就会看到「有新版本」提示。
