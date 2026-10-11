@@ -3,6 +3,7 @@
 Merchant specifics (pages, flow, safety checks) live in merchants/<name>.py; this module only
 queues jobs, lends the merchant's logged-in session, records results and never replays a job.
 """
+import http.client
 import json
 import sys
 import time
@@ -28,6 +29,16 @@ with db() as c:
     c.execute('CREATE INDEX IF NOT EXISTS idx_checkout_history_task ON checkout_history(task_id,id)')
 
 HISTORY_KEEP=30
+# A restock is when the shop is slowest. Retry a purchase that failed BEFORE the order request was sent
+# (timeouts, 5xx); the merchant releases its attempt record in that case. Once the order request has been
+# sent the merchant returns a result instead of raising, so nothing is ever sent twice.
+RETRY_SECONDS=90
+RETRY_TRIES=6
+RETRY_PAUSE=1.5
+
+def transient(error):
+    from accounts import LoginIssue
+    return isinstance(error,(OSError,http.client.HTTPException)) or (isinstance(error,LoginIssue) and error.status=='error')
 HISTORY_FIELDS=('order_submitted','paid','final_total_eur','overview_total_eur','balance_sufficient','coupon_accepted')
 
 def history(task_id,limit=HISTORY_KEEP):
@@ -66,7 +77,7 @@ def enqueue(task_id,mode='preflight'):
     if not cfg:
         raise ValueError('任务不存在')
     merchant=merchants.checkout_merchant(cfg)
-    if not merchant.account_ready():
+    if not getattr(merchant,'account_usable',merchant.account_ready)():
         raise ValueError('先到商家账户验证 %s 登录'%merchant.LABEL)
     policy=purchases.policy_for(task_id)
     if not policy:
@@ -96,6 +107,41 @@ def enqueue(task_id,mode='preflight'):
     log(task_id,'info','自动下单已排队（余额付款，上限 %s %s）'%(policy['max_total'],policy.get('currency','EUR')) if mode=='purchase'
         else '结账预检已排队；只配置和检查，不勾选条款、不下单')
 
+def _execute(row,cfg,purchase,started):
+    """Run the job. A purchase that fails before its order request was sent is retried for a short window."""
+    deadline=started+RETRY_SECONDS
+    tries=0
+    while True:
+        tries+=1
+        try:
+            merchant=merchants.checkout_merchant(cfg)
+            policy=purchases.policy_for(row['task_id'])
+            if not policy or (purchase and not purchases.is_armed(policy)):
+                raise JobError('购买设置已变化或自动付款已关闭，未执行')
+            with merchant.session() as client:
+                result=merchant.purchase(client,cfg,policy,row['task_id']) if purchase else merchant.preflight(client,cfg,policy)
+            if tries>1:
+                result['message']+='（第 %d 次尝试）'%tries
+            return result
+        except Exception as error:
+            if not (purchase and transient(error) and tries<RETRY_TRIES and time.time()<deadline
+                    and purchases.is_armed(purchases.policy_for(row['task_id']))):
+                if purchase and tries>1:
+                    log(row['task_id'],'warning','自动下单重试 %d 次后仍失败；订单从未提交'%tries)
+                raise
+            log(row['task_id'],'warning','自动下单遇到网络或网站繁忙（%s），第 %d 次，稍后重试；订单尚未提交'%(type(error).__name__,tries))
+            time.sleep(RETRY_PAUSE)
+
+def _failure(error,cfg):
+    expected=(JobError,purchases.AttemptExists,*getattr(merchants.REGISTRY.get(cfg.get('adapter')),'ERRORS',()))
+    if isinstance(error,expected):
+        return 'error',{'status':'error','message':str(error),'order_submitted':False,'paid':False}
+    # Location only (no exception text, which could contain page content): journalctl -u vps-watch-worker
+    frames=traceback.extract_tb(error.__traceback__)[-4:]
+    print('checkout error',type(error).__name__,' <- '.join(f'{f.filename.rsplit("/",1)[-1]}:{f.lineno}' for f in reversed(frames)),file=sys.stderr,flush=True)
+    return 'error',{'status':'error','message':'结账遇到网络或页面异常（%s），请查看登录状态后重试；未下单'%type(error).__name__,
+                    'order_submitted':False,'paid':False}
+
 def run_next(notify=None):
     now=time.time()
     with db() as c:
@@ -122,22 +168,9 @@ def run_next(notify=None):
     purchase=row['mode']=='purchase'
     state='done'
     try:
-        merchant=merchants.checkout_merchant(cfg)
-        policy=purchases.policy_for(row['task_id'])
-        if not policy or (purchase and not purchases.is_armed(policy)):
-            raise JobError('购买设置已变化或自动付款已关闭，未执行')
-        with merchant.session() as client:
-            result=merchant.purchase(client,cfg,policy,row['task_id']) if purchase else merchant.preflight(client,cfg,policy)
-    except (JobError,purchases.AttemptExists,*getattr(merchants.REGISTRY.get(cfg.get('adapter')),'ERRORS',())) as error:
-        state='error'
-        result={'status':'error','message':str(error),'order_submitted':False,'paid':False}
+        result=_execute(row,cfg,purchase,now)
     except Exception as error:
-        state='error'
-        result={'status':'error','message':'结账遇到网络或页面异常（%s），请查看登录状态后重试；未下单'%type(error).__name__,
-                'order_submitted':False,'paid':False}
-        # Location only (no exception text, which could contain page content): journalctl -u vps-watch-worker
-        frames=traceback.extract_tb(error.__traceback__)[-4:]
-        print('checkout error',type(error).__name__,' <- '.join(f'{f.filename.rsplit("/",1)[-1]}:{f.lineno}' for f in reversed(frames)),file=sys.stderr,flush=True)
+        state,result=_failure(error,cfg)
     if purchase and result.get('status') in ('purchased','uncertain'):
         purchases.finish(row['task_id'],result['status'])
     with db() as c:

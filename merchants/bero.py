@@ -50,6 +50,7 @@ class PreflightError(ValueError):
     pass
 
 ERRORS=(PreflightError,accounts.LoginIssue)
+PURCHASE_TIMEOUT=15
 
 # ---------------------------------------------------------------- configuration
 
@@ -152,6 +153,9 @@ def check_store_page(page,cfg):
 def account_ready():
     account=accounts.public_status()
     return bool(account['session_saved'] and account['status']=='authenticated')
+
+def account_usable():
+    return accounts.usable()
 
 def session():
     return accounts.checkout_session()
@@ -465,6 +469,7 @@ def purchase(client,cfg,policy,task_id):
     """Armed one-time purchase. Returns a report; raises nothing after the order may have been sent."""
     t=target(cfg)
     cap=Decimal(policy['max_total'])
+    client.timeout=PURCHASE_TIMEOUT  # the shop is slowest exactly when stock returns
     balance_before=read_balance(client)
     if balance_before<cap:
         return {'status':'insufficient_balance','message':f'账户余额 €{balance_before} 低于购买上限 €{cap}，未下单；请充值',

@@ -9,7 +9,7 @@ Optional:
   PRICE_OPTIONAL = True                            the page price cap may be left empty
 Adapters with SUPPORTS_CHECKOUT also provide:
   MERCHANT, HOST, ORDERS_URL, CURRENCY, ERRORS, LEGACY_DEFAULTS
-  account_ready(), session() (context manager yielding a logged-in client)
+  account_ready(), optional account_usable() (queueing), session() (context manager yielding a logged-in client)
   preflight(client, cfg, policy) -> report      dry run, never orders
   purchase(client, cfg, policy, task_id) -> report   armed one-time order
 

@@ -23,6 +23,8 @@ with db() as c:
         next_check REAL NOT NULL DEFAULT 0, revision INTEGER NOT NULL DEFAULT 1,
         lease REAL NOT NULL DEFAULT 0)''')
 
+SESSION_LOST=('blocked','manual_required','expired','login_failed')
+
 class LoginIssue(ValueError):
     def __init__(self,status,message):
         super().__init__(message)
@@ -92,6 +94,7 @@ COOKIE_FIELDS=('version','name','value','port','port_specified','domain','domain
 
 class BeroSession:
     def __init__(self,saved=None):
+        self.timeout=8
         self.jar=http.cookiejar.CookieJar()
         for item in saved or []:
             if item.get('domain','').lstrip('.')!='bero-host.de':
@@ -126,7 +129,7 @@ class BeroSession:
                     req.add_header('X-Livewire','')
             self.jar.add_cookie_header(req)
             conn=PinnedHTTPS('bero-host.de',public_ips('bero-host.de')[0])
-            conn.timeout=8
+            conn.timeout=self.timeout
             try:
                 conn.request(method,(p.path or '/')+('?' +p.query if p.query else ''),body=body,headers=dict(req.header_items()))
                 response=conn.getresponse()
@@ -241,6 +244,12 @@ def connect(*, interactive=True):
         raise ValueError('验证期间账户设置发生变化，请重新验证')
     return public_status()
 
+def usable():
+    """A saved session that can be tried. A transient network 'error' (site busy during a restock)
+    must not stop an armed purchase; real login problems clear the session, so they fail here."""
+    row=account_row()
+    return bool(row and row['session'] and row['last_verified'] and row['status'] in ('authenticated','error'))
+
 def maintain():
     row=account_row()
     if (not row or not row['session'] or not row['last_verified'] or row['next_check']>time.time()
@@ -283,9 +292,12 @@ def checkout_session():
         if not current or current['revision']!=row['revision'] or current['credentials']!=row['credentials']:
             raise ValueError('账户设置在预检期间发生变化，请重新验证')
     except LoginIssue as error:
-        with db() as c:
-            c.execute("UPDATE merchant_accounts SET session=NULL,status=?,message=?,lease=0,next_check=? WHERE merchant='bero' AND revision=? AND credentials=?",
-                      (error.status,str(error),time.time()+300,row['revision'],row['credentials']))
+        # Only a real login problem discards the saved session. A busy or failing site (HTTP 503,
+        # timeouts) says nothing about the login, so keep the session and status for the next try.
+        if error.status in SESSION_LOST:
+            with db() as c:
+                c.execute("UPDATE merchant_accounts SET session=NULL,status=?,message=?,lease=0,next_check=? WHERE merchant='bero' AND revision=? AND credentials=?",
+                          (error.status,str(error),time.time()+300,row['revision'],row['credentials']))
         raise
     finally:
         # Preserve refreshed cookies, without overwriting a changed/deleted account.
