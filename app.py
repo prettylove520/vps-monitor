@@ -181,7 +181,7 @@ def export_tasks():
 def import_tasks():
     data=request.get_json() or {}
     if not isinstance(data,dict) or data.get('format')!=EXPORT_FORMAT or not isinstance(data.get('tasks'),list):
-        raise ValueError('不是 VPS Watch 导出的任务文件')
+        raise ValueError('不是 VPS Monitor 导出的任务文件')
     if not data['tasks']:
         raise ValueError('文件里没有任务')
     configs=[]
@@ -318,7 +318,7 @@ def update_settings():
 @app.post('/api/settings/test')
 @auth
 def test_notification():
-    notifications.send_telegram('VPS Watch 测试通知：连接正常。此消息不代表补货或已下单。')
+    notifications.send_telegram('VPS Monitor 测试通知：连接正常。此消息不代表补货或已下单。')
     return jsonify(ok=True)
 
 @app.get('/api/settings/bark')
@@ -355,7 +355,7 @@ def test_wechat_notification():
     channel=(request.get_json() or {}).get('channel')
     if channel not in notifications.WECHAT:
         raise ValueError('请选择微信推送渠道')
-    notifications.send_wechat(channel,'VPS Watch 测试通知\n连接正常。此消息不代表补货或已下单。')
+    notifications.send_wechat(channel,'VPS Monitor 测试通知\n连接正常。此消息不代表补货或已下单。')
     return jsonify(ok=True)
 
 @app.delete('/api/settings/wechat/<channel>')

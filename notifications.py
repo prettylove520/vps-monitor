@@ -123,8 +123,8 @@ def send_bark(message, *, urgent=True, url=''):
     try:
         host,key=parse_bark_url(cipher().decrypt(encoded.encode()).decode())
         options=bark_settings()
-        payload={'device_key':key,'title':'VPS Watch','body':message[:3500],
-                 'group':'VPS Watch','level':options['level'] if urgent else 'active',
+        payload={'device_key':key,'title':'VPS Monitor','body':message[:3500],
+                 'group':'VPS Monitor','level':options['level'] if urgent else 'active',
                  'sound':options['sound']}
         if urgent:
             if options['level']=='critical':
@@ -138,7 +138,7 @@ def send_bark(message, *, urgent=True, url=''):
         conn=PinnedHTTPS(host,public_ips(host)[0])
         conn.timeout=10
         conn.request('POST','/push',body=json.dumps(payload,ensure_ascii=False).encode(),
-                     headers={'Content-Type':'application/json; charset=utf-8','User-Agent':'VPS-Watch/1.0'})
+                     headers={'Content-Type':'application/json; charset=utf-8','User-Agent':'VPS-Monitor/1.0'})
         response=conn.getresponse()
         body=response.read(65537)
         if response.status!=200 or len(body)>65536 or json.loads(body).get('code')!=200:
@@ -210,7 +210,7 @@ def _post(host,path,payload,*,form=False):
     conn.timeout=10
     try:
         body=urlencode(payload).encode() if form else json.dumps(payload,ensure_ascii=False).encode()
-        conn.request('POST',path,body=body,headers={'User-Agent':'VPS-Watch/1.0',
+        conn.request('POST',path,body=body,headers={'User-Agent':'VPS-Monitor/1.0',
             'Content-Type':'application/x-www-form-urlencoded' if form else 'application/json; charset=utf-8'})
         response=conn.getresponse()
         content=response.read(65537)
@@ -225,7 +225,7 @@ def send_wechat(name,message,*,url=''):
     if not saved:
         raise ValueError('尚未配置%s'%WECHAT[name]['label'])
     secret_value=saved['secret']
-    title=message.split('\n',1)[0][:60] or 'VPS Watch'
+    title=message.split('\n',1)[0][:60] or 'VPS Monitor'
     text=message[:3500]+('\n'+url if url and url not in message else '')
     try:
         if name=='pushplus':

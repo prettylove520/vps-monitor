@@ -13,7 +13,7 @@ for attempt in range(10):
         with opener.open(args.url,timeout=2) as response:
             value=json.loads(response.read(2048))
             if response.status==200 and value.get('application')=='vps-watch':
-                print('VPS Watch 网页身份检查通过。')
+                print('VPS Monitor 网页身份检查通过。')
                 raise SystemExit(0)
     except Exception:
         pass

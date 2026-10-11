@@ -1,4 +1,4 @@
-# VPS Watch · 补货工作台
+# VPS Monitor · 补货工作台
 
 自己部署在 VPS 上的 VPS 补货监控网页。发现补货时用 Bark 强提醒、微信或 Telegram 通知你；对已核实的商家（目前是 BERO），还可以用账户余额**自动下单一次**。
 

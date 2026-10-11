@@ -31,7 +31,7 @@ def newer(latest, current=VERSION):
 
 def fetch_latest():
     request = urllib.request.Request('https://api.github.com/repos/%s/releases/latest' % REPO, headers={
-        'Accept': 'application/vnd.github+json', 'User-Agent': 'VPS-Watch/' + VERSION})
+        'Accept': 'application/vnd.github+json', 'User-Agent': 'VPS-Monitor/' + VERSION})
     with urllib.request.urlopen(request, timeout=10) as response:
         body = json.loads(response.read(200_000))
     tag = body.get('tag_name', '')

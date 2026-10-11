@@ -66,7 +66,7 @@ def fetch(url, follow=True):
         conn = PinnedHTTPS(host, ip)
         try:
             conn.request('GET', (p.path or '/') + ('?' + p.query if p.query else ''), headers={
-                'User-Agent': 'VPS-Watch/1.0', 'Accept': 'text/html', 'Accept-Encoding': 'identity'})
+                'User-Agent': 'VPS-Monitor/1.0', 'Accept': 'text/html', 'Accept-Encoding': 'identity'})
             response = conn.getresponse()
             if response.status in (301, 302, 303, 307, 308):
                 location = response.getheader('Location')

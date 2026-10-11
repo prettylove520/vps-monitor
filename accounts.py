@@ -114,7 +114,7 @@ class BeroSession:
             p=validate_url(url)
             if p.hostname!='bero-host.de':
                 raise LoginIssue('blocked','登录跳转到其他网站，请人工检查；未转发账号密码或 Cookie')
-            req=Request(url,data=body,method=method,headers={'User-Agent':'VPS-Watch/1.0',
+            req=Request(url,data=body,method=method,headers={'User-Agent':'VPS-Monitor/1.0',
                 'Accept':'application/json' if is_json else 'text/html','Accept-Encoding':'identity'})
             if body is not None:
                 req.add_header('Content-Type','application/json' if is_json else 'application/x-www-form-urlencoded')

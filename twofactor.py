@@ -11,7 +11,7 @@ from urllib.parse import quote
 from notifications import cipher
 from store import setting, set_setting
 
-ISSUER='VPS Watch'
+ISSUER='VPS Monitor'
 
 def code_at(secret,counter):
     key=base64.b32decode(secret+'='*(-len(secret)%8))
