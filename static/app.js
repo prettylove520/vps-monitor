@@ -120,6 +120,10 @@ function render() {
       '有新版本 v' + update.version + (data.update_can_apply ? ' · 点此更新' : ' · 查看');
     $('#updateBannerText').textContent = '有新版本 v' + update.version + ' 可用。';
   }
+  // The merchant-account page only matters for BERO auto-pay: hide it unless a BERO task or a saved account exists.
+  const needAccounts = tasks.some(t => t.config.adapter === 'bero') || data.account_saved;
+  document.querySelector('[data-view="accounts"]').hidden = !needAccounts;
+  if (!needAccounts && currentView === 'accounts') switchView('tasks');
   $('#workerWarning').hidden = data.worker_online;
   $('#telegramWarning').hidden = data.notifications_configured;
   renderTasks();

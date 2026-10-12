@@ -1057,3 +1057,6 @@ dialog::backdrop {
     margin-left: 100%;
   }
 }
+.navitem[hidden] {
+  display: none;
+}

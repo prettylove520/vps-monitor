@@ -295,6 +295,17 @@ class NoExampleTaskTests(unittest.TestCase):
         self.assertEqual(sqlite3.connect(d / 'watch.db').execute('SELECT COUNT(*) FROM tasks').fetchone()[0], 0)
 
 
+class AccountPageTests(AppCase):
+    def test_dashboard_says_whether_an_account_is_saved(self):
+        import accounts
+        self.login()
+        with db() as c:
+            c.execute('DELETE FROM merchant_accounts')
+        self.assertFalse(self.client.get('/api/dashboard').json['account_saved'])
+        accounts.save_credentials({'email': 'account@example.com', 'password': 'private-password', 'auto_relogin': True})
+        self.assertTrue(self.client.get('/api/dashboard').json['account_saved'])
+
+
 class HiddenTemplateTests(AppCase):
     def test_product_templates_are_not_offered_but_existing_tasks_keep_working(self):
         self.login()

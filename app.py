@@ -175,6 +175,7 @@ def dashboard():
         task['stock']=stock.summary(task['id'])
     heartbeat=float(setting('worker_heartbeat','0'))
     return jsonify(tasks=tasks,logs=logs,presets={k:v for k,v in adapters.PRESETS.items() if k not in HIDDEN_PRESETS},version=VERSION,update=updates.status(),update_can_apply=updater.available(),
+                   account_saved=bool((lambda a:a['email'] or a['password_saved'] or a['session_saved'])(accounts.public_status())),
                    worker_online=time.time()-heartbeat<180,worker_heartbeat=heartbeat,
                    notifications_configured=bool(notifications.configured_channels()),
                    telegram_configured=bool(setting('telegram_token') and setting('telegram_chat')))
