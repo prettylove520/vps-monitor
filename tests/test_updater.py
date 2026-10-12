@@ -290,5 +290,23 @@ healthy() { [ "$1" = "0.0.1" ]; }
         self.assertEqual(subprocess.run(['bash', '-n', str(ROOT / 'deploy/update.sh')]).returncode, 0)
 
 
+class SeedOnceTests(unittest.TestCase):
+    def seed(self):
+        subprocess.run([sys.executable, str(ROOT / 'manage.py'), 'seed'], check=True, capture_output=True,
+                       env=dict(os.environ, WATCH_DATA=str(self.dir)), cwd=ROOT)
+
+    def count(self):
+        return sqlite3.connect(self.dir / 'watch.db').execute('SELECT COUNT(*) FROM tasks').fetchone()[0]
+
+    def test_deleted_example_task_does_not_come_back_on_upgrade(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        self.seed()
+        self.assertEqual(self.count(), 1)
+        sqlite3.connect(self.dir / 'watch.db').execute('DELETE FROM tasks').connection.commit()
+        self.seed()  # what install.sh does on every upgrade
+        self.assertEqual(self.count(), 0)
+
+
 if __name__ == '__main__':
     unittest.main()

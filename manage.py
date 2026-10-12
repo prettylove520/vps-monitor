@@ -3,7 +3,7 @@ import getpass
 import json
 import time
 from werkzeug.security import generate_password_hash
-from store import set_setting, db
+from store import set_setting, setting, db
 from adapters import PRESETS, validate
 
 p=argparse.ArgumentParser()
@@ -20,7 +20,13 @@ elif args.action=='disable-2fa':
     twofactor.force_disable()
     print('已关闭管理员两步验证。重新登录后可在「安全」页面重新绑定。')
 else:
-    with db() as c:
-        if not c.execute('SELECT 1 FROM tasks LIMIT 1').fetchone():
-            c.execute('INSERT INTO tasks(config,created) VALUES (?,?)',(json.dumps(validate(PRESETS['bero']),ensure_ascii=False),time.time()))
-    print('已准备 BERO 示例任务（暂停状态）。')
+    # The example task is created once, on a fresh install. After that, deleting it (or the whole list) must stick,
+    # so re-running install.sh for an upgrade never brings it back.
+    if setting('seeded'):
+        print('已跳过示例任务（只在全新安装时创建一次）。')
+    else:
+        with db() as c:
+            if not c.execute('SELECT 1 FROM tasks LIMIT 1').fetchone():
+                c.execute('INSERT INTO tasks(config,created) VALUES (?,?)',(json.dumps(validate(PRESETS['bero']),ensure_ascii=False),time.time()))
+                print('已准备 BERO 示例任务（暂停状态）。')
+        set_setting('seeded','1')
