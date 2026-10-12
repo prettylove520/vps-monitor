@@ -52,7 +52,7 @@ runuser -u vpswatch -- env WATCH_DATA=/var/lib/vps-watch /opt/vps-watch/.venv/bi
 
 重置密码后若要撤销原有登录会话，可在停服后备份并移除 `/var/lib/vps-watch/session.key` 再启动网页服务；不要移除 encryption.key，否则已有 Telegram Token 无法解密。
 
-网页一键更新：`install.sh` 会安装一个 root 身份的更新程序（`vps-watch-update.path` 监听 `/var/lib/vps-watch/update-request`，触发 `/opt/vps-watch/update.sh`）。网页进程本身仍是无权限的 `vpswatch` 用户，只能创建这个请求文件，且需要重新输入管理员密码；请求文件的内容不会被采用，更新来源只取 `/etc/vps-watch.env` 里的 `UPDATE_REPO`（默认 `prettylove520/vps-monitor`）的 `main` 分支。更新前备份到 `/var/backups/vps-watch`（保留最近 5 份，含数据库），校验失败或新版本不能启动会自动退回。日志：`journalctl -u vps-watch-update`。不想要这个功能：`systemctl disable --now vps-watch-update.path` 并删除 `/etc/vps-watch.env` 里的 `UPDATE_APPLY=1`。Docker 部署不提供网页更新。
+网页一键更新：`install.sh` 会安装一个 root 身份的更新程序（`vps-watch-update.path` 监听 `/var/lib/vps-watch/update-request`，触发 `/opt/vps-watch/update.sh`）。网页进程本身仍是无权限的 `vpswatch` 用户，只能创建这个请求文件，且需要已登录并通过防伪令牌校验；请求文件的内容不会被采用，更新来源只取 `/etc/vps-watch.env` 里的 `UPDATE_REPO`（默认 `prettylove520/vps-monitor`）的 `main` 分支。更新前备份到 `/var/backups/vps-watch`（保留最近 5 份，含数据库），校验失败或新版本不能启动会自动退回。日志：`journalctl -u vps-watch-update`。不想要这个功能：`systemctl disable --now vps-watch-update.path` 并删除 `/etc/vps-watch.env` 里的 `UPDATE_APPLY=1`。Docker 部署不提供网页更新。
 
 升级：备份后上传新版本，运行安装脚本；数据库和密钥保留，既有任务保留。安装脚本不会主动停掉旧的独立 BERO/VMISS 服务。
 

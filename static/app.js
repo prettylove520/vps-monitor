@@ -230,7 +230,6 @@ async function pollUpdate(oldVersion) {
 }
 async function openUpdate() {
   $('#updateError').textContent = '';
-  $('#updatePassword').value = '';
   $('#updateSummary').textContent = '正在读取…';
   $('#updateDialog').showModal();
   try {
@@ -258,10 +257,10 @@ $('#checkUpdate').onclick = async () => {
 $('#updateForm').onsubmit = async e => {
   e.preventDefault();
   $('#updateError').textContent = '';
+  if (!confirm('现在更新？更新约 1 分钟，期间页面会短暂断开。')) return;
   const before = data?.version;
   try {
-    await api('/update/apply', 'POST', { password: $('#updatePassword').value });
-    $('#updatePassword').value = '';
+    await api('/update/apply', 'POST', {});
     pollUpdate(before);
   } catch (err) {
     $('#updateError').textContent = err.message;

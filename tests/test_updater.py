@@ -79,8 +79,8 @@ class UpdateApiTests(AppCase):
             p.stop()
         shutil.rmtree(self.dir, ignore_errors=True)
 
-    def apply(self, password='test-password-123'):
-        return self.req('/api/update/apply', data={'password': password})
+    def apply(self):
+        return self.req('/api/update/apply', data={})
 
     def test_requires_login_and_csrf(self):
         anonymous = self.app.test_client() if hasattr(self, 'app') else None
@@ -93,11 +93,6 @@ class UpdateApiTests(AppCase):
     def test_state(self):
         s = self.client.get('/api/update').json
         self.assertEqual((s['latest']['version'], s['can_apply'], s['progress'], s['armed']), ('99.0.0', True, None, 0))
-
-    def test_wrong_password_writes_nothing(self):
-        r = self.apply('wrong')
-        self.assertEqual(r.status_code, 400)
-        self.assertFalse(updater.REQUEST.exists())
 
     def test_apply_drops_request_file_once(self):
         r = self.apply()

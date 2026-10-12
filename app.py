@@ -147,10 +147,6 @@ def update_check():
 @app.post('/api/update/apply')
 @auth
 def update_apply():
-    password=(request.get_json() or {}).get('password','')
-    stored=setting('admin_password')
-    if not isinstance(password,str) or not stored or not check_password_hash(stored,password):
-        raise ValueError('管理员密码不正确')
     latest=updater.request()
     log(None,'warning','已从网页发起更新到 v%s'%latest['version'])
     return jsonify(ok=True,progress=updater.status())
