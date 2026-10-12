@@ -182,8 +182,8 @@ async function openStock(task) {
 }
 let updateTimer = null;
 const updateStates = {
-  queued: '等待开始…',
-  running: '正在更新…',
+  queued: '等待开始',
+  running: '正在更新',
   done: '更新完成',
   failed: '更新失败',
   rolled_back: '已自动退回',
@@ -198,8 +198,15 @@ function showUpdate(u) {
   const recent = p && (['queued', 'running'].includes(p.state) || Date.now() / 1000 - p.time < 600);
   $('#updateProgress').hidden = !recent;
   if (recent) {
-    $('#updateProgress').textContent = (updateStates[p.state] || p.state) + (p.message ? '：' + p.message : '');
+    $('#updateProgressText').textContent = (updateStates[p.state] || p.state) + (p.message ? '：' + p.message : '');
     $('#updateProgress').className = 'banner' + (p.state === 'done' ? ' ok' : '');
+    const bar = $('#updateBar');
+    const active = ['queued', 'running'].includes(p.state);
+    const percent = p.state === 'queued' ? 3 : (p.percent ?? 0);
+    bar.hidden = !(active || p.state === 'done');
+    bar.classList.toggle('indeterminate', active && p.percent === undefined && p.state !== 'queued');
+    bar.setAttribute('aria-valuenow', percent);
+    bar.firstElementChild.style.width = percent + '%';
   }
   const working = recent && ['queued', 'running'].includes(p.state);
   $('#updateForm').hidden = !(latest && u.can_apply && !working);
@@ -224,7 +231,7 @@ async function pollUpdate(oldVersion) {
   if (working) {
     updateTimer = setTimeout(() => pollUpdate(oldVersion), 2000);
   } else if (u.progress?.state === 'done' && u.version !== oldVersion) {
-    $('#updateProgress').textContent = `已更新到 v${u.version}，正在刷新页面…`;
+    $('#updateProgressText').textContent = `已更新到 v${u.version}，正在刷新页面…`;
     setTimeout(() => location.reload(), 1500);
   }
 }

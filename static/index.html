@@ -486,7 +486,10 @@
       </div>
       <div class="dialogbody">
         <p id="updateSummary" class="ruleintro"></p>
-        <p id="updateProgress" class="banner" hidden></p>
+        <div id="updateProgress" class="banner" hidden>
+          <span id="updateProgressText"></span>
+          <div class="progress" id="updateBar" role="progressbar" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+        </div>
         <p id="updateArmed" class="banner" hidden></p>
         <form id="updateForm" autocomplete="off" hidden>
           <p class="help">

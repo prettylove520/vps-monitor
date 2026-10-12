@@ -19,12 +19,15 @@ WORK=''
 
 env_value() { sed -n "s/^$1=//p" "$ENV_FILE" 2>/dev/null | tail -n1; }
 
-set_status() { # state message [from] [to]
+set_status() { # state message [from] [to] [percent]
     local tmp="$DATA/.update-status.$$"
-    "$PYTHON" - "$tmp" "$1" "$2" "${3:-}" "${4:-}" <<'PY'
+    "$PYTHON" - "$tmp" "$1" "$2" "${3:-}" "${4:-}" "${5:-}" <<'PY'
 import json, sys, time
-path, state, message, old, new = sys.argv[1:6]
-open(path, 'w').write(json.dumps({'state': state, 'message': message, 'from': old, 'to': new, 'time': time.time()}, ensure_ascii=False))
+path, state, message, old, new, percent = sys.argv[1:7]
+info = {'state': state, 'message': message, 'from': old, 'to': new, 'time': time.time()}
+if percent:
+    info['percent'] = int(percent)
+open(path, 'w').write(json.dumps(info, ensure_ascii=False))
 PY
     chmod 644 "$tmp" && mv -f "$tmp" "$DATA/update-status.json"
     chown "$OWNER" "$DATA/update-status.json" 2>/dev/null || true
@@ -131,25 +134,27 @@ main() {
         set_status failed 'UPDATE_REPO 格式不正确' ; return 1
     fi
     old=$(current_version)
-    set_status running '正在下载新版本' "$old"
+    set_status running '正在下载新版本' "$old" '' 10
     WORK=$(mktemp -d) || { set_status failed '无法创建临时目录' "$old"; return 1; }
     trap cleanup EXIT
     if ! fetch_source "$repo" "$WORK"; then set_status failed '下载失败，请检查服务器能否访问 GitHub' "$old"; return 1; fi
     new=$(current_version "$WORK/src")
     if [ -z "$new" ]; then set_status failed '无法识别新版本号' "$old"; return 1; fi
-    if ! version_newer "$new" "$old"; then set_status done "已是最新版本 v$old" "$old" "$old"; return 0; fi
-    set_status running '正在校验新版本' "$old" "$new"
+    if ! version_newer "$new" "$old"; then set_status done "已是最新版本 v$old" "$old" "$old" 100; return 0; fi
+    set_status running '正在校验新版本' "$old" "$new" 25
     local why
     if ! why=$(validate_source "$WORK/src" 2>&1); then set_status failed "新版本校验未通过：${why:-文件不完整}" "$old" "$new"; return 1; fi
-    set_status running '正在备份当前版本和数据' "$old" "$new"
+    set_status running '正在备份当前版本和数据' "$old" "$new" 40
     BACKUP_DIR=''
     if ! backup "$old"; then set_status failed '备份失败，未做任何修改' "$old" "$new"; return 1; fi
-    set_status running '正在安装并重启' "$old" "$new"
-    if install_source "$WORK/src" && pip_install && restart_services && healthy "$new"; then
-        set_status done "已更新到 v$new" "$old" "$new"
+    set_status running '正在安装新版本' "$old" "$new" 55
+    if install_source "$WORK/src" && set_status running '正在安装依赖' "$old" "$new" 70 && pip_install &&
+        set_status running '正在重启服务' "$old" "$new" 80 && restart_services &&
+        set_status running '正在检查新版本是否正常' "$old" "$new" 90 && healthy "$new"; then
+        set_status done "已更新到 v$new" "$old" "$new" 100
         return 0
     fi
-    set_status running '新版本没有正常启动，正在退回' "$old" "$new"
+    set_status running '新版本没有正常启动，正在退回' "$old" "$new" 90
     if rollback "$BACKUP_DIR" && healthy "$old"; then
         set_status rolled_back "新版本未能启动，已自动退回 v$old，数据完好" "$old" "$new"
     else

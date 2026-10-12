@@ -196,7 +196,7 @@ echo "exit=$?"
     def test_successful_update(self):
         out = self.run_script()
         self.assertIn('exit=0', out, out)
-        self.assertEqual(self.status()['state'], 'done')
+        self.assertEqual((self.status()['state'], self.status()['percent']), ('done', 100))
         self.assertIn('9.9.9', self.version())
         self.assertFalse((self.data / 'update-request').exists())
         self.assertEqual(self.log.read_text().split(), ['pip', 'restart'])

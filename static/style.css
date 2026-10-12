@@ -1030,3 +1030,30 @@ dialog::backdrop {
 #updateDialog .actions {
   margin-top: 12px;
 }
+.progress {
+  height: 8px;
+  margin-top: 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+.progress i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 4px;
+  background: var(--green);
+  transition: width 0.6s ease;
+}
+.progress.indeterminate i {
+  width: 40% !important;
+  animation: slide 1.2s ease-in-out infinite;
+}
+@keyframes slide {
+  0% {
+    margin-left: -40%;
+  }
+  100% {
+    margin-left: 100%;
+  }
+}
