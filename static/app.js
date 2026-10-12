@@ -235,18 +235,36 @@ async function pollUpdate(oldVersion) {
     setTimeout(() => location.reload(), 1500);
   }
 }
-async function openUpdate() {
+async function startUpdate(before) {
+  $('#updateError').textContent = '';
+  try {
+    await api('/update/apply', 'POST', {});
+    pollUpdate(before);
+  } catch (err) {
+    $('#updateError').textContent = err.message;
+  }
+}
+async function openUpdate(autoStart) {
   $('#updateError').textContent = '';
   $('#updateSummary').textContent = '正在读取…';
   $('#updateDialog').showModal();
   try {
     const u = await api('/update');
-    if (showUpdate(u)) pollUpdate(u.version);
+    if (showUpdate(u)) return pollUpdate(u.version);
+    // clicking the "new version" notice means the person wants to update: ask once, then go
+    if (
+      autoStart === true &&
+      u.latest &&
+      u.can_apply &&
+      confirm('更新到 v' + u.latest.version + '？约 1 分钟，期间页面会短暂断开。')
+    )
+      startUpdate(u.version);
   } catch (e) {
     $('#updateSummary').textContent = e.message;
   }
 }
-$('#openUpdate').onclick = $('#updateNotice').onclick = $('#updateBannerButton').onclick = openUpdate;
+$('#openUpdate').onclick = () => openUpdate(false);
+$('#updateNotice').onclick = $('#updateBannerButton').onclick = () => openUpdate(true);
 $('#closeUpdate').onclick = () => {
   clearTimeout(updateTimer);
   $('#updateDialog').close();
@@ -261,17 +279,9 @@ $('#checkUpdate').onclick = async () => {
     $('#updateError').textContent = e.message;
   }
 };
-$('#updateForm').onsubmit = async e => {
+$('#updateForm').onsubmit = e => {
   e.preventDefault();
-  $('#updateError').textContent = '';
-  if (!confirm('现在更新？更新约 1 分钟，期间页面会短暂断开。')) return;
-  const before = data?.version;
-  try {
-    await api('/update/apply', 'POST', {});
-    pollUpdate(before);
-  } catch (err) {
-    $('#updateError').textContent = err.message;
-  }
+  startUpdate(data?.version);
 };
 $('#closeStock').onclick = () => $('#stockDialog').close();
 $('#exportTasks').onclick = async () => {
