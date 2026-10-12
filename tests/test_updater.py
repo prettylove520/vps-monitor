@@ -285,22 +285,23 @@ healthy() { [ "$1" = "0.0.1" ]; }
         self.assertEqual(subprocess.run(['bash', '-n', str(ROOT / 'deploy/update.sh')]).returncode, 0)
 
 
-class SeedOnceTests(unittest.TestCase):
-    def seed(self):
-        subprocess.run([sys.executable, str(ROOT / 'manage.py'), 'seed'], check=True, capture_output=True,
-                       env=dict(os.environ, WATCH_DATA=str(self.dir)), cwd=ROOT)
+class NoExampleTaskTests(unittest.TestCase):
+    def test_seed_creates_no_task_so_upgrades_cannot_bring_one_back(self):
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d, True)
+        for _ in range(2):
+            subprocess.run([sys.executable, str(ROOT / 'manage.py'), 'seed'], check=True, capture_output=True,
+                           env=dict(os.environ, WATCH_DATA=str(d)), cwd=ROOT)
+        self.assertEqual(sqlite3.connect(d / 'watch.db').execute('SELECT COUNT(*) FROM tasks').fetchone()[0], 0)
 
-    def count(self):
-        return sqlite3.connect(self.dir / 'watch.db').execute('SELECT COUNT(*) FROM tasks').fetchone()[0]
 
-    def test_deleted_example_task_does_not_come_back_on_upgrade(self):
-        self.dir = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.dir, True)
-        self.seed()
-        self.assertEqual(self.count(), 1)
-        sqlite3.connect(self.dir / 'watch.db').execute('DELETE FROM tasks').connection.commit()
-        self.seed()  # what install.sh does on every upgrade
-        self.assertEqual(self.count(), 0)
+class HiddenTemplateTests(AppCase):
+    def test_product_templates_are_not_offered_but_existing_tasks_keep_working(self):
+        self.login()
+        presets = self.client.get('/api/dashboard').json['presets']
+        self.assertEqual(sorted(presets), ['generic', 'whmcs'])
+        import adapters
+        self.assertEqual(self.req('/api/tasks', data=adapters.PRESETS['bero']).status_code, 201)
 
 
 if __name__ == '__main__':

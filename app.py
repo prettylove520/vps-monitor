@@ -21,6 +21,10 @@ from version import VERSION
 from network import FetchError
 from store import db, setting, secret, task_dict, log
 
+# Product-specific templates (BERO Anniversary M, VMISS TRI Basic) are no longer offered when adding a task. Their
+# adapters stay, so existing tasks keep working and can still be edited, exported and imported.
+HIDDEN_PRESETS={'bero','vmiss'}
+
 app=Flask(__name__,static_folder='static')
 app.config.update(SECRET_KEY=secret('session.key'),MAX_CONTENT_LENGTH=262144,
     SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Strict',
@@ -170,7 +174,7 @@ def dashboard():
         task['checkout_supported']=bool(getattr(merchants.REGISTRY.get(task['config']['adapter']),'SUPPORTS_CHECKOUT',False))
         task['stock']=stock.summary(task['id'])
     heartbeat=float(setting('worker_heartbeat','0'))
-    return jsonify(tasks=tasks,logs=logs,presets=adapters.PRESETS,version=VERSION,update=updates.status(),update_can_apply=updater.available(),
+    return jsonify(tasks=tasks,logs=logs,presets={k:v for k,v in adapters.PRESETS.items() if k not in HIDDEN_PRESETS},version=VERSION,update=updates.status(),update_can_apply=updater.available(),
                    worker_online=time.time()-heartbeat<180,worker_heartbeat=heartbeat,
                    notifications_configured=bool(notifications.configured_channels()),
                    telegram_configured=bool(setting('telegram_token') and setting('telegram_chat')))

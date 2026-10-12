@@ -446,7 +446,7 @@ function openTask(task) {
   $('#taskForm').reset();
   $('#formError').textContent = '';
   $('#dialogTitle').textContent = editing ? '编辑监控任务' : '添加监控任务';
-  fill(task?.config || data.presets.bero);
+  fill(task?.config || data.presets.whmcs);
   $('#taskDialog').showModal();
 }
 $('#add').onclick = () => openTask();
