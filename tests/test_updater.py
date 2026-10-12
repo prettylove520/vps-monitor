@@ -58,6 +58,14 @@ class FetchLatestTests(unittest.TestCase):
         updates.check_now(now=10**7 + 90, fetch=fake)
         self.assertEqual(len(calls), 2)
 
+    def test_manual_check_reports_what_happened(self):
+        ok = lambda: ('1.0.0', 'https://github.com/x')
+        self.assertEqual(updates.check_now(now=10**8, fetch=ok), 'ok')
+        self.assertEqual(updates.check_now(now=10**8 + 5, fetch=ok), 'throttled')
+        self.assertEqual(updates.check_now(now=10**8 + 100, fetch=lambda: 1 / 0), 'failed')
+        with patch.dict(os.environ, {'UPDATE_CHECK': '0'}):
+            self.assertEqual(updates.check_now(now=10**8 + 500, fetch=ok), 'disabled')
+
 
 class UpdateApiTests(AppCase):
     def setUp(self):
@@ -127,9 +135,10 @@ class UpdateApiTests(AppCase):
         self.assertIsNone(updater.status())
 
     def test_check_endpoint_returns_state(self):
+        set_setting('update_checked', '0')
         with patch('updates.fetch_latest', return_value=('100.0.0', 'https://github.com/x')):
             s = self.req('/api/update/check', data={}).json
-        self.assertEqual(s['latest']['version'], '100.0.0')
+        self.assertEqual((s['latest']['version'], s['result']), ('100.0.0', 'ok'))
 
     def test_dashboard_tells_the_page_whether_it_can_apply(self):
         self.assertTrue(self.client.get('/api/dashboard').json['update_can_apply'])

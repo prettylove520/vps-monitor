@@ -274,13 +274,31 @@ $('#closeUpdate').onclick = () => {
   $('#updateDialog').close();
 };
 $('#checkUpdate').onclick = async () => {
+  const button = $('#checkUpdate'),
+    result = $('#updateResult');
   $('#updateError').textContent = '';
+  result.hidden = true;
+  button.disabled = true;
+  button.textContent = '正在检查…';
   try {
-    const u = await api('/update/check', 'POST', {});
+    const [u] = await Promise.all([api('/update/check', 'POST', {}), new Promise(r => setTimeout(r, 700))]);
     showUpdate(u);
+    const stamp = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+    const text = {
+      ok: u.latest ? `✓ ${stamp} 已检查：发现新版本 v${u.latest.version}` : `✓ ${stamp} 已检查：当前已是最新版本`,
+      throttled: '刚刚检查过，请 1 分钟后再试',
+      failed: '没能连上 GitHub，请稍后再试',
+      disabled: '更新检查已被关闭（UPDATE_CHECK=0）',
+    }[u.result];
+    result.textContent = text;
+    result.className = 'banner' + (u.result === 'ok' ? ' ok' : '');
+    result.hidden = false;
     refresh();
   } catch (e) {
     $('#updateError').textContent = e.message;
+    button.disabled = false;
+  } finally {
+    button.textContent = '立即检查更新';
   }
 };
 $('#updateForm').onsubmit = e => {

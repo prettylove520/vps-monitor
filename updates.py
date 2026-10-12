@@ -43,12 +43,19 @@ def fetch_latest():
 
 
 def check_now(fetch=None, now=None):
-    """Manual "check for updates": at most once a minute."""
+    """Manual "check for updates" (at most once a minute). Returns 'ok', 'throttled', 'failed' or 'disabled'."""
+    if not enabled():
+        return 'disabled'
     now = time.time() if now is None else now
     if now - float(setting('update_checked', '0')) < 60:
-        return
-    set_setting('update_checked', '0')
-    maybe_check(now=now, fetch=fetch or fetch_latest)
+        return 'throttled'
+    set_setting('update_checked', str(now))
+    try:
+        version, url = (fetch or fetch_latest)()
+    except Exception:
+        return 'failed'
+    set_setting('update_latest', json.dumps({'version': version, 'url': url}))
+    return 'ok'
 
 
 def maybe_check(now=None, fetch=fetch_latest):

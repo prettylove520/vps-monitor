@@ -145,8 +145,8 @@ def update_state():
 @app.post('/api/update/check')
 @auth
 def update_check():
-    updates.check_now()
-    return update_state()
+    result=updates.check_now()
+    return jsonify(**update_state().get_json(),result=result)
 
 @app.post('/api/update/apply')
 @auth
