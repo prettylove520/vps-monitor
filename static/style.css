@@ -982,6 +982,10 @@ dialog::backdrop {
 }
 .updatenotice {
   display: block;
+  width: 100%;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
   margin-bottom: 8px;
   padding: 6px 10px;
   border-radius: 8px;
@@ -1003,4 +1007,26 @@ dialog::backdrop {
   #stockList li {
     grid-template-columns: 1fr auto;
   }
+}
+.linkbutton {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.banner.update {
+  background: #fef3c7;
+  color: #92400e;
+}
+#updateDialog a {
+  color: var(--green);
+}
+#updateDialog form + .actions {
+  margin-top: 12px;
+}
+#updateDialog .actions {
+  margin-top: 12px;
 }

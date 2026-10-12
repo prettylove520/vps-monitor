@@ -47,8 +47,10 @@
           ><button class="navitem" data-view="security">⛨ <span>安全</span></button>
         </nav>
         <div class="sidefoot">
-          <a id="updateNotice" class="updatenotice" target="_blank" rel="noopener noreferrer" hidden></a>
-          <span class="mini">运行于你的 VPS <span id="appVersion"></span></span
+          <button id="updateNotice" type="button" class="updatenotice" hidden></button>
+          <span class="mini"
+            >运行于你的 VPS <span id="appVersion"></span> ·
+            <button id="openUpdate" type="button" class="linkbutton">检查更新</button></span
           ><strong id="workerStatus">正在连接后台…</strong><button id="logout" class="subtle">退出登录</button>
         </div>
       </aside>
@@ -75,6 +77,10 @@
                 ＋ 添加任务
               </button>
             </div>
+          </div>
+          <div id="updateBanner" class="banner update" hidden>
+            <span id="updateBannerText"></span>
+            <button id="updateBannerButton" type="button" class="linkbutton">查看并更新</button>
           </div>
           <div id="workerWarning" class="banner" hidden>
             后台检查进程未运行。任务可以保存，但暂时不会检查库存，请按部署说明启动 worker 服务。
@@ -468,6 +474,34 @@
           ><button id="clearAttempt" type="button" class="secondary">清除购买记录</button>
         </div>
         <p id="armError" class="error" role="alert"></p>
+      </div>
+    </dialog>
+    <dialog id="updateDialog">
+      <div class="dialoghead">
+        <div>
+          <p class="eyebrow">UPDATE</p>
+          <h2>软件更新</h2>
+        </div>
+        <button type="button" id="closeUpdate" class="iconbutton" aria-label="关闭">×</button>
+      </div>
+      <div class="dialogbody">
+        <p id="updateSummary" class="ruleintro"></p>
+        <p id="updateProgress" class="banner" hidden></p>
+        <p id="updateArmed" class="banner" hidden></p>
+        <form id="updateForm" autocomplete="off" hidden>
+          <p class="help">
+            更新会先自动备份程序和数据，再安装新版本并重启（约 1
+            分钟，期间页面会短暂断开）。新版本没有正常启动时，会自动退回到当前版本。
+            <a id="updateNotes" target="_blank" rel="noopener noreferrer">查看更新说明</a>
+          </p>
+          <label>管理员密码<input id="updatePassword" type="password" autocomplete="current-password" /></label>
+          <div class="actions"><button id="applyUpdate" type="submit" class="primary">立即更新</button></div>
+        </form>
+        <p id="updateManual" class="help" hidden>
+          这台服务器没有开启网页更新（Docker 部署或旧版安装）。请在服务器上按部署文档的「升级」一节操作。
+        </p>
+        <div class="actions"><button id="checkUpdate" type="button" class="secondary">立即检查更新</button></div>
+        <p id="updateError" class="error" role="alert"></p>
       </div>
     </dialog>
     <dialog id="stockDialog">

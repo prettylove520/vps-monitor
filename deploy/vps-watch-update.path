@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for update requests from the VPS Monitor workbench
+
+[Path]
+PathExists=/var/lib/vps-watch/update-request
+Unit=vps-watch-update.service
+
+[Install]
+WantedBy=multi-user.target

@@ -3,7 +3,7 @@ set -euo pipefail
 if [ "$(id -u)" != 0 ]; then echo '请使用 sudo bash install.sh'; exit 1; fi
 cd -- "$(dirname -- "$0")"
 apt-get update
-apt-get install -y python3 python3-venv ca-certificates
+apt-get install -y python3 python3-venv ca-certificates curl
 if ! id vpswatch >/dev/null 2>&1; then useradd --system --home /var/lib/vps-watch --shell /usr/sbin/nologin vpswatch; fi
 install -d -m 755 /opt/vps-watch /opt/vps-watch/static /opt/vps-watch/merchants
 install -d -m 700 -o vpswatch -g vpswatch /var/lib/vps-watch
@@ -23,9 +23,14 @@ if ! runuser -u vpswatch -- env WATCH_DATA=/var/lib/vps-watch /opt/vps-watch/.ve
     runuser -u vpswatch -- env WATCH_DATA=/var/lib/vps-watch /opt/vps-watch/.venv/bin/python /opt/vps-watch/manage.py password
 fi
 runuser -u vpswatch -- env WATCH_DATA=/var/lib/vps-watch /opt/vps-watch/.venv/bin/python /opt/vps-watch/manage.py seed
-install -m 644 deploy/vps-watch-web.service deploy/vps-watch-worker.service /etc/systemd/system/
+install -m 755 deploy/update.sh /opt/vps-watch/update.sh
+if ! grep -q '^UPDATE_APPLY=' /etc/vps-watch.env; then printf 'UPDATE_APPLY=1\n' >> /etc/vps-watch.env; fi
+install -d -m 700 /var/backups/vps-watch
+install -m 644 deploy/vps-watch-web.service deploy/vps-watch-worker.service deploy/vps-watch-update.service \
+    deploy/vps-watch-update.path /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now vps-watch-web vps-watch-worker
+systemctl enable --now vps-watch-update.path
 /opt/vps-watch/.venv/bin/python /opt/vps-watch/verify-web.py
 if [ -n "${1:-}" ]; then
     bash setup-domain.sh "$1" "${2:-}"

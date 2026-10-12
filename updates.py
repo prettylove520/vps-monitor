@@ -1,6 +1,6 @@
-"""Once a day, look up the latest GitHub release so the workbench can show "new version available".
+"""Once a day, look up the newest version on GitHub so the workbench can show "new version available".
 
-Only the public release tag is requested; nothing about this installation is sent.
+Only the public version file of the project is requested; nothing about this installation is sent.
 Turn it off with UPDATE_CHECK=0, or point UPDATE_REPO at a fork.
 """
 import json
@@ -30,15 +30,25 @@ def newer(latest, current=VERSION):
 
 
 def fetch_latest():
-    request = urllib.request.Request('https://api.github.com/repos/%s/releases/latest' % REPO, headers={
-        'Accept': 'application/vnd.github+json', 'User-Agent': 'VPS-Monitor/' + VERSION})
+    """Version number of the main branch. main only receives finished, tested versions, and this
+    does not need a GitHub Release to exist."""
+    request = urllib.request.Request('https://raw.githubusercontent.com/%s/main/version.py' % REPO, headers={
+        'User-Agent': 'VPS-Monitor/' + VERSION})
     with urllib.request.urlopen(request, timeout=10) as response:
-        body = json.loads(response.read(200_000))
-    tag = body.get('tag_name', '')
-    url = body.get('html_url', '')
-    if not parse(tag) or not url.startswith('https://github.com/'):
-        raise ValueError('unexpected release data')
-    return tag.lstrip('v'), url
+        text = response.read(4000).decode('utf-8', 'replace')
+    match = re.search(r"VERSION\s*=\s*['\"](\d+\.\d+\.\d+)['\"]", text)
+    if not match:
+        raise ValueError('unexpected version file')
+    return match.group(1), 'https://github.com/%s/blob/main/CHANGELOG.md' % REPO
+
+
+def check_now(fetch=None, now=None):
+    """Manual "check for updates": at most once a minute."""
+    now = time.time() if now is None else now
+    if now - float(setting('update_checked', '0')) < 60:
+        return
+    set_setting('update_checked', '0')
+    maybe_check(now=now, fetch=fetch or fetch_latest)
 
 
 def maybe_check(now=None, fetch=fetch_latest):

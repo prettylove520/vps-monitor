@@ -62,6 +62,10 @@ docker compose up -d
 
 ## 升级
 
+**网页一键更新（v0.5.0 起，一键脚本安装的适用）**：有新版本时，侧边栏和任务页顶部会提示，点「更新」，输入管理员密码即可。程序会先备份程序和数据库，安装后自动重启；新版本没起来会自动退回。有自动下单正在执行时会拒绝更新。更新的是 `main` 分支（只合并测试通过的版本）。从 v0.4.x 升级到 v0.5.0 需要先手动升级一次（下面的命令），之后就不用再登录服务器了。
+
+手动升级：
+
 ```bash
 cd vps-watch && git pull && bash install.sh          # 一键脚本安装的
 cd vps-watch && git pull && docker compose build && docker compose up -d   # Docker

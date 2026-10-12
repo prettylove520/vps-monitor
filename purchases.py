@@ -45,6 +45,11 @@ def is_armed(policy):
     return bool(policy and policy.get('automatic_purchase_enabled') and policy.get('payment')=='balance'
                 and policy.get('status')=='armed' and policy.get('merchant') in VERIFIED_CHECKOUT_ADAPTERS)
 
+def armed_count():
+    with db() as c:
+        rows=[json.loads(r[0]) for r in c.execute('SELECT policy FROM purchase_policies')]
+    return sum(1 for p in rows if is_armed(p))
+
 def attempt_for(task_id):
     """Latest unresolved attempt for this task (blocks re-arming until the user clears it)."""
     with db() as c:

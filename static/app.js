@@ -114,9 +114,11 @@ function render() {
   $('#appVersion').textContent = data.version ? 'v' + data.version : '';
   const update = data.update;
   $('#updateNotice').hidden = !update;
+  $('#updateBanner').hidden = !update;
   if (update) {
-    $('#updateNotice').href = update.url;
-    $('#updateNotice').textContent = '有新版本 v' + update.version + ' · 查看更新说明';
+    $('#updateNotice').textContent =
+      '有新版本 v' + update.version + (data.update_can_apply ? ' · 点此更新' : ' · 查看');
+    $('#updateBannerText').textContent = '有新版本 v' + update.version + ' 可用。';
   }
   $('#workerWarning').hidden = data.worker_online;
   $('#telegramWarning').hidden = data.notifications_configured;
@@ -178,6 +180,93 @@ async function openStock(task) {
     $('#stockSummary').textContent = e.message;
   }
 }
+let updateTimer = null;
+const updateStates = {
+  queued: '等待开始…',
+  running: '正在更新…',
+  done: '更新完成',
+  failed: '更新失败',
+  rolled_back: '已自动退回',
+};
+function showUpdate(u) {
+  const latest = u.latest;
+  $('#updateSummary').textContent = latest
+    ? `当前版本 v${u.version}，最新版本 v${latest.version}。`
+    : `当前版本 v${u.version}，已是最新版本。`;
+  $('#updateNotes').href = latest ? latest.url : '#';
+  const p = u.progress;
+  const recent = p && (['queued', 'running'].includes(p.state) || Date.now() / 1000 - p.time < 600);
+  $('#updateProgress').hidden = !recent;
+  if (recent) {
+    $('#updateProgress').textContent = (updateStates[p.state] || p.state) + (p.message ? '：' + p.message : '');
+    $('#updateProgress').className = 'banner' + (p.state === 'done' ? ' ok' : '');
+  }
+  const working = recent && ['queued', 'running'].includes(p.state);
+  $('#updateForm').hidden = !(latest && u.can_apply && !working);
+  $('#updateManual').hidden = !(latest && !u.can_apply);
+  $('#updateArmed').hidden = !(latest && u.armed);
+  $('#updateArmed').textContent = u.armed
+    ? `目前有 ${u.armed} 个任务开着自动付款。更新期间（约 1 分钟）这些任务不会下单，建议避开补货时段。`
+    : '';
+  $('#checkUpdate').disabled = working;
+  return working;
+}
+async function pollUpdate(oldVersion) {
+  clearTimeout(updateTimer);
+  let u;
+  try {
+    u = await api('/update');
+  } catch (e) {
+    updateTimer = setTimeout(() => pollUpdate(oldVersion), 2000); // the service is restarting
+    return;
+  }
+  const working = showUpdate(u);
+  if (working) {
+    updateTimer = setTimeout(() => pollUpdate(oldVersion), 2000);
+  } else if (u.progress?.state === 'done' && u.version !== oldVersion) {
+    $('#updateProgress').textContent = `已更新到 v${u.version}，正在刷新页面…`;
+    setTimeout(() => location.reload(), 1500);
+  }
+}
+async function openUpdate() {
+  $('#updateError').textContent = '';
+  $('#updatePassword').value = '';
+  $('#updateSummary').textContent = '正在读取…';
+  $('#updateDialog').showModal();
+  try {
+    const u = await api('/update');
+    if (showUpdate(u)) pollUpdate(u.version);
+  } catch (e) {
+    $('#updateSummary').textContent = e.message;
+  }
+}
+$('#openUpdate').onclick = $('#updateNotice').onclick = $('#updateBannerButton').onclick = openUpdate;
+$('#closeUpdate').onclick = () => {
+  clearTimeout(updateTimer);
+  $('#updateDialog').close();
+};
+$('#checkUpdate').onclick = async () => {
+  $('#updateError').textContent = '';
+  try {
+    const u = await api('/update/check', 'POST', {});
+    showUpdate(u);
+    refresh();
+  } catch (e) {
+    $('#updateError').textContent = e.message;
+  }
+};
+$('#updateForm').onsubmit = async e => {
+  e.preventDefault();
+  $('#updateError').textContent = '';
+  const before = data?.version;
+  try {
+    await api('/update/apply', 'POST', { password: $('#updatePassword').value });
+    $('#updatePassword').value = '';
+    pollUpdate(before);
+  } catch (err) {
+    $('#updateError').textContent = err.message;
+  }
+};
 $('#closeStock').onclick = () => $('#stockDialog').close();
 $('#exportTasks').onclick = async () => {
   try {

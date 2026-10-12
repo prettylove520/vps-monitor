@@ -16,6 +16,7 @@ import merchants
 import twofactor
 import stock
 import updates
+import updater
 from version import VERSION
 from network import FetchError
 from store import db, setting, secret, task_dict, log
@@ -131,6 +132,29 @@ def totp_disable():
     log(None,'warning','已关闭管理员两步验证')
     return jsonify(totp_enabled=False)
 
+@app.get('/api/update')
+@auth
+def update_state():
+    return jsonify(version=VERSION,latest=updates.status(),can_apply=updater.available(),progress=updater.status(),
+                   armed=purchases.armed_count())
+
+@app.post('/api/update/check')
+@auth
+def update_check():
+    updates.check_now()
+    return update_state()
+
+@app.post('/api/update/apply')
+@auth
+def update_apply():
+    password=(request.get_json() or {}).get('password','')
+    stored=setting('admin_password')
+    if not isinstance(password,str) or not stored or not check_password_hash(stored,password):
+        raise ValueError('管理员密码不正确')
+    latest=updater.request()
+    log(None,'warning','已从网页发起更新到 v%s'%latest['version'])
+    return jsonify(ok=True,progress=updater.status())
+
 @app.post('/api/logout')
 @auth
 def logout():
@@ -150,7 +174,7 @@ def dashboard():
         task['checkout_supported']=bool(getattr(merchants.REGISTRY.get(task['config']['adapter']),'SUPPORTS_CHECKOUT',False))
         task['stock']=stock.summary(task['id'])
     heartbeat=float(setting('worker_heartbeat','0'))
-    return jsonify(tasks=tasks,logs=logs,presets=adapters.PRESETS,version=VERSION,update=updates.status(),
+    return jsonify(tasks=tasks,logs=logs,presets=adapters.PRESETS,version=VERSION,update=updates.status(),update_can_apply=updater.available(),
                    worker_online=time.time()-heartbeat<180,worker_heartbeat=heartbeat,
                    notifications_configured=bool(notifications.configured_channels()),
                    telegram_configured=bool(setting('telegram_token') and setting('telegram_chat')))

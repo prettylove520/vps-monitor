@@ -1,0 +1,8 @@
+[Unit]
+Description=Update VPS Monitor (started by the workbench)
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/vps-watch.env
+ExecStart=/opt/vps-watch/update.sh
+TimeoutStartSec=900
