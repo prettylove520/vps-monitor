@@ -73,6 +73,10 @@ cd vps-watch && git pull && docker compose build && docker compose up -d   # Doc
 
 数据库、密钥、任务和设置都会保留，旧版本的数据会自动迁移。升级后建议跑一次结账预检。改动见 [CHANGELOG.md](CHANGELOG.md)。
 
+## 网站按 IP 拦截（HTTP 403）怎么办
+
+监控任务里有「代理（可选）」，填 `socks5://主机:端口` 或 `http://主机:端口`，只对这个任务生效。如果你的出口是 SSR 节点，在监控服务器上用 root 运行 `tools/ssr-socks.sh`，粘贴 SSR 链接，它会装好本地 SOCKS5（`127.0.0.1:1080`）并自检。程序不会绕过验证码，也不会伪装访问；代理只是换一个出口 IP。
+
 ## 常见问题
 
 **任务一直显示「检查异常」或「访问受限」？**
