@@ -414,6 +414,16 @@
             </div>
             <p class="help">缺货文字优先。价格不支持千分位分隔；匹配不明确时只记录异常，不报有货。</p>
           </div>
+          <label
+            >代理（可选）<input
+              name="proxy"
+              maxlength="300"
+              autocomplete="off"
+              placeholder="socks5://用户:密码@主机:端口 或 http://主机:端口"
+          /></label>
+          <p class="help">
+            网站按 IP 拦截（HTTP 403）时，可填自己的出口代理，只对这个任务生效。代理地址不会写入导出文件。
+          </p>
           <label>备注<textarea name="note" rows="2" maxlength="500"></textarea></label>
           <p id="formError" role="alert" class="error"></p>
         </div>

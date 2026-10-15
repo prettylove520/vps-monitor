@@ -11,7 +11,7 @@ import checkout
 import purchases
 import stock
 import updates
-from network import get_html, FetchError
+from network import get_html, FetchError, PROXY
 from store import db, log, set_setting, DATA
 
 def claim():
@@ -36,6 +36,7 @@ def perform(row,cfg):
     notified=row['notified']
     delay=cfg['interval']+random.uniform(0,1.5)
     result={}
+    PROXY.set(cfg.get('proxy',''))
     try:
         if hasattr(merchants.REGISTRY.get(cfg['adapter']),'check'):
             result=adapters.check(cfg,get_html)

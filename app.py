@@ -196,9 +196,9 @@ EXPORT_FORMAT='vps-watch-tasks'
 @app.get('/api/tasks/export')
 @auth
 def export_tasks():
-    """Task settings only: no account credentials, notification keys, purchase settings or history."""
+    """Task settings only: no proxy address, account credentials, notification keys, purchase settings or history."""
     with db() as c:
-        configs=[json.loads(r[0]) for r in c.execute('SELECT config FROM tasks ORDER BY id')]
+        configs=[{k:v for k,v in json.loads(r[0]).items() if k!='proxy'} for r in c.execute('SELECT config FROM tasks ORDER BY id')]
     return jsonify(format=EXPORT_FORMAT,version=VERSION,exported=time.time(),tasks=configs)
 
 @app.post('/api/tasks/import')

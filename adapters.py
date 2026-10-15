@@ -2,7 +2,7 @@
 import json
 from decimal import Decimal, InvalidOperation
 from bs4 import BeautifulSoup
-from network import validate_url, FetchError
+from network import validate_url, parse_proxy, FetchError
 import merchants
 from merchants.common import one  # noqa: F401  (kept for compatibility)
 from store import db
@@ -23,6 +23,12 @@ def validate(data):
     if not result['name']:
         raise ValueError('请填写任务名称')
     validate_url(result['url'])
+    proxy=data.get('proxy','')
+    if not isinstance(proxy,str) or len(proxy)>300:
+        raise ValueError('代理地址格式不正确')
+    if proxy.strip():
+        parse_proxy(proxy.strip())
+        result['proxy']=proxy.strip()
     try:
         interval=int(data.get('interval',60))
         if interval<15 or interval>86400:
