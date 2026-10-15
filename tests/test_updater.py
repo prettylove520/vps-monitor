@@ -319,7 +319,7 @@ class HiddenTemplateTests(AppCase):
     def test_product_templates_are_not_offered_but_existing_tasks_keep_working(self):
         self.login()
         presets = self.client.get('/api/dashboard').json['presets']
-        self.assertEqual(sorted(presets), ['generic', 'whmcs'])
+        self.assertEqual(sorted(presets), ['generic', 'vmiss', 'whmcs'])
         import adapters
         self.assertEqual(self.req('/api/tasks', data=adapters.PRESETS['bero']).status_code, 201)
 

@@ -21,9 +21,9 @@ from version import VERSION
 from network import FetchError
 from store import db, setting, secret, task_dict, log
 
-# Product-specific templates (BERO Anniversary M, VMISS TRI Basic) are no longer offered when adding a task. Their
+# The BERO Anniversary M template is no longer offered when adding a task. Their
 # adapters stay, so existing tasks keep working and can still be edited, exported and imported.
-HIDDEN_PRESETS={'bero','vmiss'}
+HIDDEN_PRESETS={'bero'}
 
 app=Flask(__name__,static_folder='static')
 app.config.update(SECRET_KEY=secret('session.key'),MAX_CONTENT_LENGTH=262144,
