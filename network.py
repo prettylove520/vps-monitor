@@ -134,7 +134,7 @@ class Page:
     def __init__(self, url, status, html='', location=''):
         self.url, self.status, self.html, self.location = url, status, html, location
 
-def fetch(url, follow=True):
+def fetch(url, follow=True, kind='html'):
     proxy = parse_proxy(PROXY.get()) if PROXY.get() else None
     for _ in range(4):
         p = validate_url(url)
@@ -143,7 +143,7 @@ def fetch(url, follow=True):
         conn = _connection(host, ip, proxy)
         try:
             conn.request('GET', (p.path or '/') + ('?' + p.query if p.query else ''), headers={
-                'User-Agent': 'VPS-Monitor/1.0', 'Accept': 'text/html', 'Accept-Encoding': 'identity'})
+                'User-Agent': 'VPS-Monitor/1.0', 'Accept': 'application/json' if kind == 'json' else 'text/html', 'Accept-Encoding': 'identity'})
             response = conn.getresponse()
             if response.status in (301, 302, 303, 307, 308):
                 location = response.getheader('Location')
@@ -166,8 +166,9 @@ def fetch(url, follow=True):
                 except (ValueError, TypeError, OverflowError):
                     seconds = 0
                 raise FetchError('网站返回 HTTP %s' % response.status, retry_after=max(0, seconds))
-            if 'text/html' not in response.getheader('Content-Type', ''):
-                raise FetchError('返回内容不是 HTML 页面')
+            wanted = 'json' if kind == 'json' else 'text/html'
+            if wanted not in response.getheader('Content-Type', ''):
+                raise FetchError('返回内容不是 JSON 数据' if kind == 'json' else '返回内容不是 HTML 页面')
             body = response.read(3_000_001)
             if len(body) > 3_000_000:
                 raise FetchError('页面超过 3 MB，停止解析')

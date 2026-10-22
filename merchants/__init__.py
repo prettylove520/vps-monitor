@@ -15,9 +15,9 @@ Adapters with SUPPORTS_CHECKOUT also provide:
 
 To add a merchant: create merchants/<name>.py and register it below.
 """
-from merchants import bero, generic, vmiss, whmcs
+from merchants import bero, generic, jsonapi, vmiss, whmcs
 
-REGISTRY={m.NAME:m for m in (bero,whmcs,vmiss,generic)}
+REGISTRY={m.NAME:m for m in (bero,whmcs,vmiss,jsonapi,generic)}
 PRESETS={key:preset for m in REGISTRY.values() for key,preset in m.PRESETS.items()}
 
 def get(name):

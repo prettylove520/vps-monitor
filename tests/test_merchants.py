@@ -17,7 +17,7 @@ BERO=adapters.PRESETS['bero']
 
 class MerchantRegistryTests(unittest.TestCase):
     def test_registry_and_presets(self):
-        self.assertEqual(set(merchants.REGISTRY),{'bero','whmcs','vmiss','generic'})
+        self.assertEqual(set(merchants.REGISTRY),{'bero','whmcs','vmiss','jsonapi','generic'})
         self.assertTrue(merchants.get('bero').SUPPORTS_CHECKOUT)
         self.assertFalse(merchants.get('vmiss').SUPPORTS_CHECKOUT)
         with self.assertRaises(ValueError):merchants.get('unknown')

@@ -352,6 +352,7 @@
               <option value="bero" hidden>BERO 套餐页（支持自动付款）</option>
               <option value="whmcs">WHMCS 商家（通用，填下单链接）</option>
               <option value="vmiss">VMISS · TRI Basic（专用）</option>
+              <option value="jsonapi">JSON 接口（页面由 JS 加载的商店）</option>
               <option value="generic">其他静态商品页（规则配置）</option>
             </select></label
           ><label>任务名称<input name="name" required maxlength="100" placeholder="例如：周年特惠 / 德国节点" /></label
@@ -400,6 +401,25 @@
             <label
               >商品编号 pid<input name="pid" inputmode="numeric" maxlength="9" placeholder="粘贴了下单链接可留空"
             /></label>
+          </div>
+          <div id="jsonFields" hidden>
+            <div class="ruleintro">
+              页面用 JavaScript 加载、下载不到库存文字时使用。在浏览器 F12 → Network → Fetch/XHR
+              里找到商品的接口地址，填到上面的「商品页面」；再填下面几项，告诉程序在返回的数据里怎么找到这个商品。库存字段大于
+              0 视为有货。
+            </div>
+            <label
+              >商店页面（可选，通知里的链接）<input name="page_url" type="url" maxlength="1500" placeholder="https://"
+            /></label>
+            <div class="formgrid">
+              <label>商品列表路径<input name="list_path" maxlength="120" placeholder="data.product.items" /></label>
+              <label>库存字段<input name="stock_field" maxlength="60" placeholder="stock" /></label>
+            </div>
+            <div class="formgrid">
+              <label>用哪个字段识别商品<input name="match_field" maxlength="60" placeholder="id" /></label
+              ><label>该字段的值<input name="match_value" maxlength="100" placeholder="13" /></label>
+            </div>
+            <label>价格字段（可选）<input name="price_field" maxlength="60" placeholder="price" /></label>
           </div>
           <div id="genericFields" hidden>
             <div class="ruleintro">适用于无需登录、HTML 中直接含价格和库存的商品页。动态页面需要单独适配。</div>
