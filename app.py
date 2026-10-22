@@ -346,6 +346,22 @@ def test_notification():
     notifications.send_telegram('VPS Monitor 测试通知：连接正常。此消息不代表补货或已下单。')
     return jsonify(ok=True)
 
+_last_test_all=[0.0]
+
+@app.post('/api/settings/test-all')
+@auth
+def test_all_notifications():
+    """Send one test message through every configured channel and report each channel separately."""
+    now=time.time()
+    if now-_last_test_all[0]<5:
+        raise ValueError('刚刚测试过，请几秒后再试')
+    _last_test_all[0]=now
+    channels=notifications.configured_channels()
+    result=notifications.send('VPS Monitor 测试通知：全部渠道连接正常。此消息不代表补货或已下单。',urgent=False)
+    labels=notifications.CHANNEL_LABELS
+    return jsonify(channels=[{'id':c,'label':labels.get(c,c),'ok':c in result['sent'],
+                              'error':result['failed'].get(c,'')} for c in channels])
+
 @app.get('/api/settings/bark')
 @auth
 def bark_settings():

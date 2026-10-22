@@ -305,6 +305,29 @@ $('#updateForm').onsubmit = e => {
   e.preventDefault();
   startUpdate(data?.version);
 };
+$('#testAll').onclick = async () => {
+  const button = $('#testAll'),
+    list = $('#testAllResult');
+  button.disabled = true;
+  button.textContent = '正在发送测试…';
+  list.innerHTML = '';
+  try {
+    const r = await api('/settings/test-all', 'POST', {});
+    list.innerHTML = r.channels
+      .map(
+        c =>
+          `<li class="${c.ok ? 'ok' : 'bad'}"><b>${esc(c.label)}</b> ${
+            c.ok ? '✓ 已发送，请到手机确认收到' : '✗ ' + esc(c.error || '发送失败')
+          }</li>`,
+      )
+      .join('');
+  } catch (e) {
+    list.innerHTML = `<li class="bad">${esc(e.message)}</li>`;
+  } finally {
+    button.disabled = false;
+    button.textContent = '一键测试所有通知渠道';
+  }
+};
 $('#closeStock').onclick = () => $('#stockDialog').close();
 $('#exportTasks').onclick = async () => {
   try {

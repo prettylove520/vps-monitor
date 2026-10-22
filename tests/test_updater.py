@@ -315,6 +315,35 @@ class AccountPageTests(AppCase):
         self.assertTrue(self.client.get('/api/dashboard').json['account_saved'])
 
 
+class TestAllNotificationsTests(AppCase):
+    def test_reports_each_channel_and_is_rate_limited(self):
+        import app as web
+        self.login()
+        web._last_test_all[0] = 0
+        with patch('app.notifications.configured_channels', return_value=['telegram', 'bark']), \
+                patch('app.notifications.send', return_value={'sent': ['telegram'], 'failed': {'bark': 'Bark 发送失败，请检查该渠道配置或网络'},
+                                                              'complete': False}) as send:
+            r = self.req('/api/settings/test-all', data={})
+            again = self.req('/api/settings/test-all', data={})
+        self.assertEqual(r.status_code, 200, r.json)
+        self.assertEqual([(c['id'], c['ok']) for c in r.json['channels']], [('telegram', True), ('bark', False)])
+        self.assertIn('Bark', r.json['channels'][1]['error'])
+        self.assertEqual(send.call_count, 1)
+        self.assertEqual(again.status_code, 400)
+
+    def test_nothing_configured(self):
+        import app as web
+        self.login()
+        web._last_test_all[0] = 0
+        with patch('app.notifications.configured_channels', return_value=[]):
+            r = self.req('/api/settings/test-all', data={})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('尚未启用通知', r.json['error'])
+
+    def test_requires_login(self):
+        self.assertIn(self.client.post('/api/settings/test-all', json={}).status_code, (401, 403))  # no session, no CSRF token
+
+
 class HiddenTemplateTests(AppCase):
     def test_product_templates_are_not_offered_but_existing_tasks_keep_working(self):
         self.login()

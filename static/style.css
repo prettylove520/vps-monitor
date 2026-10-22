@@ -1060,3 +1060,23 @@ dialog::backdrop {
 .navitem[hidden] {
   display: none;
 }
+.testresult {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.testresult li {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #991b1b;
+}
+.testresult li.ok {
+  background: #e6f4ec;
+  color: #14532d;
+}
+.testresult:empty {
+  display: none;
+}
